@@ -60,15 +60,24 @@ mkdir -p "$(dirname "$out")"
 
 # Keep the raw CLI output if anything fails, so it can be inspected.
 raw="$(mktemp)"
-trap 'rc=$?; if (( rc )) && [[ -s "$raw" || -s "$raw.err" ]]; then echo "Raw CLI output kept at $raw (errors: $raw.err)" >&2; else rm -f "$raw" "$raw.err"; fi' EXIT
+trap 'rc=$?; if (( rc )) && [[ -s "$raw" || -s "$raw.err" ]]; then echo "Raw CLI output kept at $raw (errors: $raw.err)" >&2; else rm -f "$raw" "$raw.err"; fi; rm -f "$raw.timedout"' EXIT
 
 # Run a command with stdin closed (so a sign-in prompt can't hang it) and a time limit.
 # Portable: macOS has no `timeout` command by default.
 run_with_timeout() {
   local secs="$1"; shift
+  # Own process group, so a timeout stops the CLI and every process it launched.
+  set -m
   "$@" </dev/null &
   local pid=$! rc=0
-  ( sleep "$secs"; kill -TERM "$pid" 2>/dev/null ) &
+  set +m
+  # Watcher: if the time limit passes, record it and stop the whole group. If it's
+  # cancelled first, it stops its own sleep so nothing is left running.
+  ( trap 'kill "$s" 2>/dev/null; exit 0' TERM
+    sleep "$secs" & s=$!; wait "$s"
+    : > "$raw.timedout"
+    kill -TERM -- -"$pid" 2>/dev/null
+    sleep 5; kill -KILL -- -"$pid" 2>/dev/null ) &
   local watcher=$!
   wait "$pid" || rc=$?
   kill "$watcher" 2>/dev/null; wait "$watcher" 2>/dev/null || true
@@ -85,7 +94,7 @@ command -v "$tool" >/dev/null || { echo "Unavailable: $tool CLI not installed ($
 
 rc=0
 run_with_timeout "$limit" "${cmd[@]}" > "$raw" 2> "$raw.err" || rc=$?
-if (( rc == 143 )); then
+if [[ -e "$raw.timedout" ]] || (( rc == 143 )); then
   echo "Unavailable: $tool timed out after ${limit}s." >&2; exit 4
 elif (( rc != 0 )); then
   echo "Unavailable: $tool exited with code $rc (often means it isn't signed in). Last error lines:" >&2
