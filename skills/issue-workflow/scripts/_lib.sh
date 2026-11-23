@@ -5,11 +5,13 @@
 # GraphQL, which is blocked in Claude Code cloud sessions.
 
 # Label that marks an issue as being worked on. Override with ISSUE_WORKFLOW_LABEL.
+# shellcheck disable=SC2034  # used by the scripts that source this file
 IW_LABEL="${ISSUE_WORKFLOW_LABEL:-in-progress}"
 
 # Issues with any of these labels are never picked. Override with a comma-separated
 # ISSUE_WORKFLOW_SKIP_LABELS. Matching ignores case.
 IW_DEFAULT_SKIP_LABELS="blocked,on-hold,wontfix,won't fix,duplicate,invalid,question,needs-design,needs-discussion,needs-info,needs-triage,epic,discussion"
+# shellcheck disable=SC2034  # used by the scripts that source this file
 IW_SKIP_LABELS="${ISSUE_WORKFLOW_SKIP_LABELS:-$IW_DEFAULT_SKIP_LABELS}"
 
 # owner/repo from the origin remote, falling back to gh.

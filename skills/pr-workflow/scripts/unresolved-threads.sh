@@ -31,6 +31,7 @@ rest_comments() {
 }
 
 # 1. GraphQL
+# shellcheck disable=SC2016  # GraphQL query: $owner etc. are GraphQL variables, not shell ones
 if out="$(gh api graphql -F owner="$owner" -F repo="$repo" -F pr="$pr" -f query='
 query($owner: String!, $repo: String!, $pr: Int!) {
   repository(owner: $owner, name: $repo) {

@@ -1,0 +1,3 @@
+# Follow `source "$(dirname "$0")/_lib.sh"` so helpers defined there are checked too.
+external-sources=true
+source-path=SCRIPTDIR

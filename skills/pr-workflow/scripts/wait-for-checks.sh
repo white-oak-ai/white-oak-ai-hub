@@ -68,7 +68,8 @@ while :; do
          + [$st[] | select(.state == "failure" or .state == "error") | "\(.name): \(.state)"])
         | .[]' <<<"$runs")"
       if [[ -n "$failed" ]]; then
-        echo "Checks failed:"; echo "$failed" | sed 's/^/  - /'
+        echo "Checks failed:"
+        while IFS= read -r line; do echo "  - $line"; done <<<"$failed"
         exit 1
       fi
       pending="$(jq --argjson st "$statuses" \

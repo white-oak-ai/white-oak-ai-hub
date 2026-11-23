@@ -44,6 +44,7 @@ else
 fi
 
 # Markdown for one comment (shared by inline and fallback modes).
+# shellcheck disable=SC2016  # jq program: \( ) must reach jq unexpanded
 comment_md='"**[\(.severity)] \(.title)**\n\n\(.body)"
   + (if (.suggestion // "") != "" then "\n\n```suggestion\n\(.suggestion)\n```" else "" end)'
 
