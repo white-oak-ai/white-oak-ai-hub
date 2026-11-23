@@ -1,12 +1,12 @@
 ---
 name: pr-workflow
-description: Open a GitHub pull request for the current work, have an independent senior-engineer reviewer (Claude, Codex, Gemini or Copilot; chosen once and remembered) review it, fix the comments, and re-review until approved (max 3 rounds). Use when asked to open, create, raise or ship a PR, to review and fix a PR, "PR this", or to change which AI reviews PRs.
+description: Open a GitHub pull request for the current work, have an independent senior-engineer reviewer (Claude, Codex, Gemini or Copilot; chosen once and remembered, with automatic fallback) review it, fix the comments, re-review until approved (max 3 rounds), then merge once CI passes. Use when asked to open, create, raise or ship a PR, to review and fix a PR, "PR this", or to change which AI reviews PRs.
 ---
 
 # PR Workflow
 
-Open a PR, get it reviewed by a separate senior-engineer agent, fix what it finds, and
-repeat until it's approved. The review and every fix are recorded on the PR, so a human
+Open a PR, get it reviewed by a separate senior-engineer agent, fix what it finds,
+repeat until it's approved, then merge it once every comment is addressed and CI passes. The review and every fix are recorded on the PR, so a human
 can see what was raised and how it was handled.
 
 **Why a separate agent reviews:** the session that wrote the code is a poor judge of it.
@@ -78,6 +78,11 @@ does the fixes, and the reviewer checks them on the next round.
 
 ## 3. Review round N (start at N = 1)
 
+**Record the commit being reviewed.** Before each round, make sure everything is pushed,
+then note the PR's head: `gh api repos/<owner>/<repo>/pulls/<pr> --jq .head.sha` (it
+must equal `git rev-parse HEAD`). Call it `<reviewed-sha>`. The review applies to that
+commit only; the merge step refuses anything else.
+
 Every reviewer gets the same instructions (`<skill-dir>/agents/senior-code-reviewer.md`),
 and **none** gets your own explanation of the change or why you made it. Fresh eyes are
 the point; the PR description is enough.
@@ -100,7 +105,7 @@ list:
    reviewer returns invalid JSON twice.
 4. Remember who reviewed and why any earlier one was skipped, for example
    `Claude Opus (fallback: Gemini CLI not signed in)`. Pass it to step 4 as `--reviewer`
-   and include it in the step 7 report.
+   and include it in the step 8 report.
 
 **Don't stop to ask the user about a fallback.** The chain is the answer. Don't change
 the saved reviewer either; next PR starts from the top of the list again.
@@ -146,7 +151,7 @@ only, then stop and tell the user plainly that the PR still needs an independent
 ## 4. Post the review (skip for Copilot)
 
 ```bash
-<skill-dir>/scripts/post-review.sh <pr> <wf>/round-N.json N --reviewer "<who reviewed>"
+<skill-dir>/scripts/post-review.sh <pr> <wf>/round-N.json N --reviewer "<who reviewed>" --sha <reviewed-sha>
 ```
 
 This posts a GitHub review (event `COMMENT`, since GitHub blocks approving or requesting
@@ -187,24 +192,94 @@ resolved. Skip threads that already have a "Fixed in" or "Not changed" reply.
 
 ## 6. Re-review
 
-Go back to step 3 with N + 1. Stop when either:
+Go back to step 3 with N + 1. Any push after a review needs another round, **even when
+that review approved**: only an approved `<reviewed-sha>` can be merged, and fixing an
+approving round's minor comments moves the head. Stop when either:
 
 - the verdict is `approve` and no reviewer threads are left unresolved except ones you
   pushed back on (for Copilot, which gives no verdict: its latest review added no new
   comments), or
 - you've finished round 3. Don't loop past 3; if blockers remain, a human needs to look.
 
-## 7. Report back
+**At the round limit:** if round 3 approves but leaves `minor` or `nit` comments, don't
+push fixes, which would leave the head unreviewed and unmergeable. Reply on each thread
+`Deferred to a follow-up: round limit reached`, resolve it, and list it in the report so
+the user can pick it up. `blocker` and `major` comments are never deferred; they mean the
+PR isn't approved.
+
+## 7. Wait for checks, then merge
+
+When the review loop ends, merge the PR yourself if **all** of these hold:
+
+- The final review came from an independent reviewer (not `self`) with verdict
+  `approve`. For Copilot, its latest review added no new comments.
+- Every review thread is resolved, **including human comments**. A thread you pushed
+  back on stays open for a human, so it blocks the merge.
+- No reviewer's latest review is "Request changes", and no human has asked in a PR
+  comment for changes or for it not to be merged. Read the conversation:
+  `gh api "repos/<owner>/<repo>/issues/<pr>/comments" --paginate`. If a human objected,
+  don't merge; report it.
+- Nothing was pushed after the final approval: the PR head still equals the
+  `<reviewed-sha>` of the approving round.
+- The CI checks pass (step below).
+- Auto-merge is on: `<skill-dir>/scripts/reviewer-config.sh get-auto-merge` prints `on`
+  (the default). Turn it off with `set-auto-merge off` if the user asks.
+- The user hasn't said not to merge this one, and it isn't a draft.
+
+If any of these fail, don't merge. Leave the PR open and say what's missing in step 8.
+
+**Wait for CI:**
+
+```bash
+<skill-dir>/scripts/wait-for-checks.sh <pr> --sha <reviewed-sha>
+```
+
+- Exit 0: checks passed. If it printed "No CI checks configured" or "No checks ran for
+  this commit", that counts as passing, but say so in the report.
+- Exit 1: a check failed. Treat it like a review comment: find the cause (the failing
+  check's logs), fix it, run tests, commit `Fix CI: <what>`, and push. A fix changes code
+  the reviewer already approved, so run one more review round (step 3) if you're under 3
+  rounds. If you're at 3, don't merge; report it.
+- Exit 2: checks were still running after 30 minutes, or GitHub couldn't be read. Don't
+  merge; report it.
+- Exit 3: something was pushed after the approval. Run another review round (if you're
+  under 3) on the new head, or don't merge.
+
+**Merge:**
+
+```bash
+<skill-dir>/scripts/merge-pr.sh <pr> --sha <reviewed-sha>
+```
+
+The script checks everything again right before merging. It refuses if the PR head
+isn't `<reviewed-sha>`, or if the PR has unresolved threads (or more than it can read),
+a "Request changes" review, conflicts, failing checks, is out of date, is blocked by
+branch protection (such as a required human approval), or targets a branch other than
+the default one. It never bypasses branch protection, and it tells GitHub to merge
+exactly `<reviewed-sha>`, so code pushed after approval is never merged unreviewed. It uses a merge commit when the repo
+allows one, which keeps the "Fixed in <sha>" replies pointing at real commits; pass
+`--method squash` or `--method rebase` only if the user asks.
+
+If it refuses, don't try to work around it. Report the reason.
+
+**Stacked PRs:** if this PR targets another PR's branch, don't merge either one here.
+Merging the other PR would merge code this run never reviewed, and merging this one into
+that branch wouldn't put it on the default branch. Only once the other PR has been merged
+through its own approved run: retarget this one
+(`gh api -X PATCH repos/<owner>/<repo>/pulls/<pr> -f base=<default>`), then run a fresh
+review round and CI wait on the retargeted PR, since its diff may have changed, before
+merging. Otherwise leave it open and report.
+
+## 8. Report back
 
 Give the user:
 
-- the PR link
+- the PR link, and whether it was **merged** (with the merge commit) or left open, and why
 - how many review rounds ran and the final verdict
 - who reviewed, and any fallback that happened with the reason (for example "Gemini CLI
   wasn't signed in, so Claude Opus reviewed"). If it came down to a self-review, say so
-  first: the PR still needs an independent review.
+  first: the PR still needs an independent review, so it wasn't merged.
+- the CI result, or that the repo has no CI
 - what was fixed (a short list, not every nit)
-- anything left open: pushed-back comments with your reason, or blockers that remain
-  after round 3
-
-**Never merge the PR.** Merging is the user's call.
+- anything left open: pushed-back comments with your reason, blockers that remain after
+  round 3, or what stopped the merge

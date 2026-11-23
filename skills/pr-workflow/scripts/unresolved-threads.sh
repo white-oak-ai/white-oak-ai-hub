@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # List unresolved review threads on a PR as a JSON array, one object per thread.
 #
-# Usage: unresolved-threads.sh <pr-number>
+# Usage: unresolved-threads.sh <pr-number> [--strict]
+#
+# --strict (used by merge-pr.sh): exit 3 instead of answering when the list might be
+# incomplete: more than 100 threads or comments, or resolution can't be read at all.
 #
 # Output fields: thread_id, comment_id (first comment; use it to reply), path, line,
 # outdated, author, body, replies[], url, resolved.
@@ -16,7 +19,8 @@
 set -uo pipefail
 source "$(dirname "$0")/_lib.sh"
 
-pr="${1:?Usage: unresolved-threads.sh <pr-number>}"
+pr="${1:?Usage: unresolved-threads.sh <pr-number> [--strict]}"
+strict=false; [[ "${2:-}" == "--strict" ]] && strict=true
 owner_repo="$(repo_slug)" || exit 1
 owner="${owner_repo%/*}"
 repo="${owner_repo#*/}"
@@ -47,6 +51,7 @@ query($owner: String!, $repo: String!, $pr: Int!) {
   threads="$(jq '.data.repository.pullRequest.reviewThreads' <<<"$out")"
   if jq -e '.pageInfo.hasNextPage or any(.nodes[]; .comments.pageInfo.hasNextPage)' <<<"$threads" >/dev/null; then
     echo "Warning: this PR has more than 100 threads or comments; some aren't listed. Check the PR on GitHub too." >&2
+    $strict && exit 3
   fi
   jq '[.nodes[]
        | select(.isResolved | not)
@@ -86,6 +91,7 @@ fi
 
 # 3. Plain REST (no resolution info)
 echo "Note: couldn't read thread resolution; listing all review threads with resolved=null." >&2
+$strict && exit 3
 rest_comments | jq '
   . as $all
   | [.[] | select(.in_reply_to_id == null) | . as $top

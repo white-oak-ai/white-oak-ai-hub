@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Post the senior reviewer's findings to a PR as a GitHub review with inline comments.
 #
-# Usage: post-review.sh <pr-number> <findings.json> [round] [--reviewer "<label>"] [--dry-run]
+# Usage: post-review.sh <pr-number> <findings.json> [round] [--reviewer "<label>"] [--sha <commit>] [--dry-run]
+#
+# --sha is the commit that was reviewed; the comments attach to it. Defaults to the
+# PR's current head.
 #
 # --reviewer names who did the review in the header, e.g. "Claude Opus" or
 # "Claude Opus (fallback: Gemini CLI not signed in)", so the PR shows when a fallback ran.
@@ -13,11 +16,12 @@
 set -euo pipefail
 source "$(dirname "$0")/_lib.sh"
 
-dry_run=false; reviewer=""; pos=()
+dry_run=false; reviewer=""; reviewed_sha=""; pos=()
 while (( $# )); do
   case "$1" in
     --dry-run) dry_run=true ;;
     --reviewer) reviewer="${2:?--reviewer needs a label}"; shift ;;
+    --sha) reviewed_sha="${2:?--sha needs a commit}"; shift ;;
     *) pos+=("$1") ;;
   esac
   shift
@@ -25,6 +29,9 @@ done
 pr="${pos[0]:?Usage: post-review.sh <pr-number> <findings.json> [round] [--reviewer label] [--dry-run]}"
 findings="${pos[1]:?findings.json path required}"
 round="${pos[2]:-1}"
+if [[ -n "$reviewed_sha" && ! "$reviewed_sha" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "Error: --sha must be the full 40-character commit SHA." >&2; exit 1
+fi
 
 jq -e '.verdict and (.comments | type == "array")' "$findings" >/dev/null \
   || { echo "Error: $findings is not valid reviewer JSON (needs verdict and comments[])." >&2; exit 1; }
@@ -33,7 +40,7 @@ if $dry_run; then
   repo="OWNER/REPO"; head_sha="HEAD_SHA"
 else
   repo="$(repo_slug)"
-  head_sha="$(pr_head_sha "$pr")"
+  head_sha="${reviewed_sha:-$(pr_head_sha "$pr")}"
 fi
 
 # Markdown for one comment (shared by inline and fallback modes).

@@ -87,6 +87,16 @@ To change the fallback order:
 `skills/pr-workflow/scripts/reviewer-config.sh set-fallbacks claude-sonnet,codex`.
 To change the time limit for the Codex and Gemini CLIs, set `PR_REVIEW_TIMEOUT` (seconds).
 
+**Merging (new: on by default).** `pr-workflow` used to always leave PRs open for you;
+it now merges them itself when it's safe. When the reviewer approves, every review thread is resolved (including
+human comments) and CI passes, the skill merges the PR. It won't merge after a
+self-review, with a comment it pushed back on still open, with failing checks or merge
+conflicts, or past branch protection such as a required human approval. A repo with no
+CI counts as passing, and the report says so. It only merges the exact commit the
+reviewer approved: anything pushed afterward needs another review. A human's "Request
+changes" review or an objection in the PR conversation also blocks it. To turn merging off and keep PRs open for
+you: `skills/pr-workflow/scripts/reviewer-config.sh set-auto-merge off`.
+
 ### Subagents
 
 `pr-workflow` works without extra setup. To also make its reviewer available as a
@@ -124,7 +134,7 @@ white-oak-ai-hub/
 
 | Skill | What it does |
 |---|---|
-| [`pr-workflow`](skills/pr-workflow/SKILL.md) | Opens a PR, has an independent senior-engineer reviewer (Claude, Codex, Gemini or Copilot, chosen once and remembered) review it, fixes the comments, and re-reviews (max 3 rounds). Never merges. |
+| [`pr-workflow`](skills/pr-workflow/SKILL.md) | Opens a PR, has an independent senior-engineer reviewer (Claude, Codex, Gemini or Copilot, chosen once and remembered) review it, fixes the comments, re-reviews (max 3 rounds), then merges once every comment is addressed and CI passes. |
 
 ## Creating a skill
 
