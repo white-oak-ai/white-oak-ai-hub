@@ -68,7 +68,14 @@ case "${1:-}" in
     echo "Saved fallback order: ${list//,/ → }"
     ;;
   get-auto-merge)
-    if [[ -f "$file" ]] && [[ "$(jq -r '.auto_merge' "$file" 2>/dev/null)" == "false" ]]; then
+    # Merging is a big step, so anything unclear means off: only a missing file (never
+    # configured) or an explicit true means on.
+    if [[ ! -f "$file" ]]; then
+      echo on
+    elif ! jq -e . "$file" >/dev/null 2>&1; then
+      echo "Warning: $file can't be read; treating auto-merge as off." >&2
+      echo off
+    elif [[ "$(jq -r '.auto_merge' "$file")" == "false" ]]; then
       echo off
     else
       echo on
