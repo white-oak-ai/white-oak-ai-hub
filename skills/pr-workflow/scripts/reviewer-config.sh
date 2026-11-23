@@ -68,7 +68,7 @@ case "${1:-}" in
     echo "Saved fallback order: ${list//,/ → }"
     ;;
   get-auto-merge)
-    if [[ -f "$file" ]] && [[ "$(jq -r '.auto_merge // empty' "$file" 2>/dev/null)" == "false" ]]; then
+    if [[ -f "$file" ]] && [[ "$(jq -r '.auto_merge' "$file" 2>/dev/null)" == "false" ]]; then
       echo off
     else
       echo on
