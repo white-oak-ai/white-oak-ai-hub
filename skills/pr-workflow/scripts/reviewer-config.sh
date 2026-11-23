@@ -22,12 +22,22 @@ case "${1:-}" in
     r="${2:?Usage: reviewer-config.sh set <$valid>}"
     [[ " $valid " == *" $r "* ]] || { echo "Error: reviewer must be one of: $valid" >&2; exit 1; }
     mkdir -p "$dir"
-    existing="{}"; [[ -f "$file" ]] && existing="$(cat "$file")"
-    jq --arg r "$r" '.reviewer = $r' <<<"$existing" > "$file.tmp" && mv "$file.tmp" "$file"
+    # Start fresh if the file is missing or isn't valid JSON.
+    existing="{}"
+    if [[ -f "$file" ]] && jq -e . "$file" >/dev/null 2>&1; then existing="$(cat "$file")"; fi
+    jq --arg r "$r" '.reviewer = $r' <<<"$existing" > "$file.tmp"
+    mv "$file.tmp" "$file"
     echo "Saved PR reviewer: $r ($file)"
     ;;
   clear)
-    [[ -f "$file" ]] && jq 'del(.reviewer)' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+    if [[ -f "$file" ]]; then
+      if jq -e . "$file" >/dev/null 2>&1; then
+        jq 'del(.reviewer)' "$file" > "$file.tmp"
+        mv "$file.tmp" "$file"
+      else
+        rm -f "$file"
+      fi
+    fi
     echo "Cleared saved PR reviewer."
     ;;
   *)

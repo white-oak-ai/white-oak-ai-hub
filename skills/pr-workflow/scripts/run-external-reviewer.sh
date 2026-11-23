@@ -7,6 +7,7 @@
 # Uses the same instructions as the Claude reviewer (agents/senior-code-reviewer.md), so
 # the output format matches and post-review.sh works unchanged.
 set -euo pipefail
+source "$(dirname "$0")/_lib.sh"
 
 tool="${1:?Usage: run-external-reviewer.sh <codex|gemini> <pr> <base> <round> <out.json> [prev.json]}"
 pr="${2:?pr required}"; base="${3:?base branch required}"; round="${4:?round required}"
@@ -28,6 +29,11 @@ prompt="$instructions
 - See the changes with: git diff origin/$base...HEAD   (or: gh pr diff $pr)"
 
 if [[ -n "$prev" && -f "$prev" ]]; then
+  # Replies newer than the previous round's findings file (all pages).
+  since="$(python3 -c 'import os,sys,datetime as d; print(d.datetime.fromtimestamp(os.path.getmtime(sys.argv[1]), d.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))' "$prev")"
+  replies="$(gh api --paginate "repos/$(repo_slug)/pulls/$pr/comments" 2>/dev/null \
+    | jq -s --arg since "$since" 'add // [] | [.[] | select(.in_reply_to_id != null and .created_at > $since) | {path, line, body}]' \
+    || echo "[]")"
   prompt="$prompt
 
 ## Previous round's findings
@@ -36,15 +42,20 @@ $(cat "$prev")
 
 ## Replies posted on the PR since then
 
-$(gh api "repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/pulls/$pr/comments" \
-   --jq '[.[] | select(.in_reply_to_id != null) | {path, line, body}]' 2>/dev/null || echo "[]")"
+$replies"
 fi
 
 prompt="$prompt
 
 Return only the JSON object described above."
 
+# Create the output folder before the (slow, possibly paid) review runs.
+mkdir -p "$(dirname "$out")"
+
+# Keep the raw CLI output if anything fails, so it can be inspected.
 raw="$(mktemp)"
+trap 'rc=$?; if (( rc )); then echo "Raw CLI output kept at $raw" >&2; else rm -f "$raw"; fi' EXIT
+
 case "$tool" in
   codex)
     command -v codex >/dev/null || { echo "Error: codex CLI not installed (npm i -g @openai/codex)." >&2; exit 1; }
@@ -76,4 +87,3 @@ found.setdefault("comments", [])
 json.dump(found, open(sys.argv[2], "w"), indent=2)
 print(f"Saved {sys.argv[2]}: verdict={found['verdict']}, {len(found['comments'])} comment(s)")
 PY
-rm -f "$raw"

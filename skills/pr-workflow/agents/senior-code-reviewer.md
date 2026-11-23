@@ -63,6 +63,7 @@ Return **only** a JSON object, no prose before or after, in this shape:
     {
       "path": "src/orders/orders.service.ts",
       "line": 42,
+      "start_line": 40,
       "severity": "blocker" | "major" | "minor" | "nit",
       "title": "Short label",
       "body": "What is wrong, why it matters, what to do instead.",
@@ -71,5 +72,9 @@ Return **only** a JSON object, no prose before or after, in this shape:
   ]
 }
 ```
+
+`start_line` is optional. Include it only for a comment, and especially a `suggestion`,
+that covers several lines: it's the first line and `line` is the last, both in the diff.
+A `suggestion` replaces exactly the lines from `start_line` (or `line` alone) to `line`.
 
 Use `"verdict": "approve"` only when there are no `blocker` or `major` comments.

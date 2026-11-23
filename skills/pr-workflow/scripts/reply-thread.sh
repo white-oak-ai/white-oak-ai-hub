@@ -7,13 +7,14 @@
 # you don't have one. Use --resolve when the comment was fixed; leave it off when you
 # disagree and are explaining why, so a human can decide.
 set -uo pipefail
+source "$(dirname "$0")/_lib.sh"
 
 pr="${1:?Usage: reply-thread.sh <pr> <comment_id> <thread_id|-> <message> [--resolve]}"
 comment="${2:?comment_id required}"
 thread="${3:?thread_id required (or -)}"
 msg="${4:?message required}"
 resolve="${5:-}"
-owner_repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)" || exit 1
+owner_repo="$(repo_slug)" || exit 1
 
 # Reply over plain REST, which works everywhere.
 gh api -X POST "repos/$owner_repo/pulls/$pr/comments/$comment/replies" -f body="$msg" \

@@ -19,11 +19,13 @@ does the fixes, and the reviewer checks them on the next round.
 
 - `gh auth status` succeeds, the folder is a git repo with a GitHub remote, and `jq` is
   installed. If `gh` isn't signed in, stop and tell the user to run `gh auth login`.
-- Find the default branch: `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`.
-- In Claude Code cloud sessions, GitHub GraphQL is blocked and `gh pr create` may fail.
-  If it does, open the PR over REST instead:
-  `gh api repos/<owner>/<repo>/pulls -f title=... -f head=<branch> -f base=<default> -F body=@<file>`.
-  The scripts in `scripts/` already fall back to REST on their own.
+- Get `<owner>/<repo>` from `git remote get-url origin`, then find the default branch:
+  `gh api repos/<owner>/<repo> --jq .default_branch`.
+- Prefer `gh api` (REST) over `gh pr ...` and `gh repo view`. Those commands use GitHub
+  GraphQL, which is blocked in Claude Code cloud sessions. The scripts in `scripts/`
+  already use REST.
+- Set `WF="$(git rev-parse --git-dir)/pr-workflow"` and `mkdir -p "$WF"`. Review files
+  go here: inside the git dir, so they're never committed, and correct in worktrees too.
 
 ## 0b. Pick the reviewer (ask once, then remember)
 
@@ -60,15 +62,16 @@ does the fixes, and the reviewer checks them on the next round.
 
 ## 2. Open the PR
 
-- If a PR already exists for this branch (`gh pr view --json number,url`), use it and skip
-  to step 3.
+- If a PR already exists for this branch, use it and skip to step 3:
+  `gh api "repos/<owner>/<repo>/pulls?head=<owner>:<branch>&state=open" --jq '.[0] | {number, html_url}'`.
 - Push: `git push -u origin HEAD`.
 - Write the body to a temp file. If `.github/pull_request_template.md` (or a file in
   `.github/PULL_REQUEST_TEMPLATE/`) exists, fill in that template. Otherwise use:
   **Summary** (what and why), **Changes** (bullets), **Testing** (what you ran), **Notes**
   (risks, follow-ups).
-- `gh pr create --base <default> --title "<title>" --body-file <file>`. Use a clear,
-  imperative title. Add `--draft` only if the user asked for a draft.
+- Open it over REST:
+  `gh api repos/<owner>/<repo>/pulls -f title="<title>" -f head=<branch> -f base=<default> -F body=@<file>`.
+  Use a clear, imperative title. Add `-F draft=true` only if the user asked for a draft.
 
 ## 3. Review round N (start at N = 1)
 
@@ -82,16 +85,16 @@ the change or why you made it. Fresh eyes are the point; the PR description is e
   frontmatter) as its instructions.
 - Set the model to match (`opus` or `sonnet`).
 - Tell it the repo path, PR number, base branch and round number, and to review with
-  `gh pr diff <n>` and `git diff origin/<base>...HEAD`. From round 2 on, also give it the
+  `git diff origin/<base>...HEAD`. From round 2 on, also give it the
   previous round's findings JSON and the replies posted on each thread.
-- Save its JSON reply to `.git/pr-workflow/round-N.json`. Check it with `jq -e .verdict`;
+- Save its JSON reply to `$WF/round-N.json`. Check it with `jq -e .verdict`;
   if it isn't valid JSON, ask the reviewer once to resend only the JSON.
 
 **`codex` or `gemini`:** run the CLI in read-only mode. The script passes along the
 previous round and replies, and saves the JSON:
 
 ```bash
-<skill-dir>/scripts/run-external-reviewer.sh <codex|gemini> <pr> <base> N .git/pr-workflow/round-N.json [.git/pr-workflow/round-<N-1>.json]
+<skill-dir>/scripts/run-external-reviewer.sh <codex|gemini> <pr> <base> N "$WF/round-N.json" ["$WF/round-<N-1>.json"]
 ```
 
 **`copilot`:** Copilot posts its own review on the PR, so there's no JSON and no step 4.
@@ -103,12 +106,11 @@ previous round and replies, and saves the JSON:
 When it returns, go straight to step 5. Copilot can't see replies to its comments, so on
 re-review it judges the new code only.
 
-The `.git/pr-workflow/` folder sits inside `.git`, so these files are never committed.
 
 ## 4. Post the review (skip for Copilot)
 
 ```bash
-<skill-dir>/scripts/post-review.sh <pr> .git/pr-workflow/round-N.json N
+<skill-dir>/scripts/post-review.sh <pr> "$WF/round-N.json" N
 ```
 
 This posts a GitHub review (event `COMMENT`, since GitHub blocks approving or requesting

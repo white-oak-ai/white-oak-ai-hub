@@ -8,6 +8,7 @@
 # If GitHub rejects the inline comments (422, usually a line not in the diff), it
 # re-posts everything in the review body so nothing is lost.
 set -euo pipefail
+source "$(dirname "$0")/_lib.sh"
 
 pr="${1:?Usage: post-review.sh <pr-number> <findings.json> [round] [--dry-run]}"
 findings="${2:?findings.json path required}"
@@ -22,8 +23,8 @@ jq -e '.verdict and (.comments | type == "array")' "$findings" >/dev/null \
 if $dry_run; then
   repo="OWNER/REPO"; head_sha="HEAD_SHA"
 else
-  repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
-  head_sha="$(gh pr view "$pr" --json headRefOid -q .headRefOid)"
+  repo="$(repo_slug)"
+  head_sha="$(pr_head_sha "$pr")"
 fi
 
 # Markdown for one comment (shared by inline and fallback modes).
@@ -40,7 +41,9 @@ marker=$'\n\n<!-- pr-workflow:senior-review -->'
 
 inline_payload="$(jq --arg sha "$head_sha" --arg body "$header$marker" "
   {commit_id: \$sha, event: \"COMMENT\", body: \$body,
-   comments: [.comments[] | {path, line, side: \"RIGHT\", body: ($comment_md)}]}" "$findings")"
+   comments: [.comments[] | {path, line, side: \"RIGHT\", body: ($comment_md)}
+              + (if (.start_line // null) != null and .start_line < .line
+                 then {start_line, start_side: \"RIGHT\"} else {} end)]}" "$findings")"
 
 fallback_payload="$(jq --arg sha "$head_sha" --arg header "$header" --arg marker "$marker" "
   {commit_id: \$sha, event: \"COMMENT\",
@@ -56,6 +59,10 @@ fi
 
 if out="$(gh api -X POST "repos/$repo/pulls/$pr/reviews" --input - <<<"$inline_payload" 2>&1)"; then
   echo "Posted review with $(jq '.comments | length' "$findings") inline comment(s): $(jq -r .html_url <<<"$out")"
+elif ! grep -q "HTTP 422" <<<"$out"; then
+  # Auth, 404, 5xx or a timeout: don't retry, since a timed-out review may already exist.
+  echo "Error posting review: $(head -c 500 <<<"$out")" >&2
+  exit 1
 else
   echo "Inline comments rejected ($(head -c 300 <<<"$out")). Posting all findings in the review body instead." >&2
   out="$(gh api -X POST "repos/$repo/pulls/$pr/reviews" --input - <<<"$fallback_payload")"
