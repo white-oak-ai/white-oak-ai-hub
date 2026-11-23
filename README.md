@@ -24,6 +24,16 @@ white-oak-ai-hub/
     └── validate.sh         # check every SKILL.md has valid frontmatter
 ```
 
+## Skills
+
+| Skill | What it does |
+|---|---|
+| [`pr-workflow`](skills/pr-workflow/SKILL.md) | Opens a PR, has an independent senior-engineer agent review it, posts the review, fixes the comments, and re-reviews (max 3 rounds). Never merges. Needs `gh` and `jq`. |
+
+**Optional:** to make the reviewer available as its own agent in Claude Code, copy
+`skills/pr-workflow/agents/senior-code-reviewer.md` into `~/.claude/agents/`. The skill
+works without this step.
+
 ## Creating a skill
 
 ```bash
