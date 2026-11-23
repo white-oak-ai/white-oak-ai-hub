@@ -6,6 +6,8 @@
 #        reviewer-config.sh clear                   -> forgets it (the skill will ask again)
 #        reviewer-config.sh get-fallbacks           -> fallback order, one per line
 #        reviewer-config.sh set-fallbacks <a,b,...> -> saves the fallback order
+#        reviewer-config.sh get-auto-merge          -> "on" (default) or "off"
+#        reviewer-config.sh set-auto-merge <on|off> -> merge automatically when it's safe?
 #
 # Fallbacks are tried, in order, when the main reviewer can't run. The default is
 # claude-opus, then claude-sonnet.
@@ -65,7 +67,24 @@ case "${1:-}" in
     mv "$file.tmp" "$file"
     echo "Saved fallback order: ${list//,/ → }"
     ;;
+  get-auto-merge)
+    if [[ -f "$file" ]] && [[ "$(jq -r '.auto_merge // empty' "$file" 2>/dev/null)" == "false" ]]; then
+      echo off
+    else
+      echo on
+    fi
+    ;;
+  set-auto-merge)
+    v="${2:?Usage: reviewer-config.sh set-auto-merge <on|off>}"
+    case "$v" in on) b=true ;; off) b=false ;; *) echo "Error: use on or off." >&2; exit 1 ;; esac
+    mkdir -p "$dir"
+    existing="{}"
+    if [[ -f "$file" ]] && jq -e . "$file" >/dev/null 2>&1; then existing="$(cat "$file")"; fi
+    jq --argjson b "$b" '.auto_merge = $b' <<<"$existing" > "$file.tmp"
+    mv "$file.tmp" "$file"
+    echo "Auto-merge: $v"
+    ;;
   *)
-    echo "Usage: $0 get | set <reviewer> | clear | get-fallbacks | set-fallbacks <a,b,...>" >&2; exit 1
+    echo "Usage: $0 get | set <reviewer> | clear | get-fallbacks | set-fallbacks <a,b,...> | get-auto-merge | set-auto-merge <on|off>" >&2; exit 1
     ;;
 esac

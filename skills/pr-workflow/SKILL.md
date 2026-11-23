@@ -1,12 +1,12 @@
 ---
 name: pr-workflow
-description: Open a GitHub pull request for the current work, have an independent senior-engineer reviewer (Claude, Codex, Gemini or Copilot; chosen once and remembered) review it, fix the comments, and re-review until approved (max 3 rounds). Use when asked to open, create, raise or ship a PR, to review and fix a PR, "PR this", or to change which AI reviews PRs.
+description: Open a GitHub pull request for the current work, have an independent senior-engineer reviewer (Claude, Codex, Gemini or Copilot; chosen once and remembered, with automatic fallback) review it, fix the comments, re-review until approved (max 3 rounds), then merge once CI passes. Use when asked to open, create, raise or ship a PR, to review and fix a PR, "PR this", or to change which AI reviews PRs.
 ---
 
 # PR Workflow
 
-Open a PR, get it reviewed by a separate senior-engineer agent, fix what it finds, and
-repeat until it's approved. The review and every fix are recorded on the PR, so a human
+Open a PR, get it reviewed by a separate senior-engineer agent, fix what it finds,
+repeat until it's approved, then merge it once every comment is addressed and CI passes. The review and every fix are recorded on the PR, so a human
 can see what was raised and how it was handled.
 
 **Why a separate agent reviews:** the session that wrote the code is a poor judge of it.
@@ -100,7 +100,7 @@ list:
    reviewer returns invalid JSON twice.
 4. Remember who reviewed and why any earlier one was skipped, for example
    `Claude Opus (fallback: Gemini CLI not signed in)`. Pass it to step 4 as `--reviewer`
-   and include it in the step 7 report.
+   and include it in the step 8 report.
 
 **Don't stop to ask the user about a fallback.** The chain is the answer. Don't change
 the saved reviewer either; next PR starts from the top of the list again.
@@ -194,17 +194,66 @@ Go back to step 3 with N + 1. Stop when either:
   comments), or
 - you've finished round 3. Don't loop past 3; if blockers remain, a human needs to look.
 
-## 7. Report back
+## 7. Wait for checks, then merge
+
+When the review loop ends, merge the PR yourself if **all** of these hold:
+
+- The final review came from an independent reviewer (not `self`) with verdict
+  `approve`. For Copilot, its latest review added no new comments.
+- Every review thread is resolved, **including human comments**. A thread you pushed
+  back on stays open for a human, so it blocks the merge.
+- The CI checks pass (step below).
+- Auto-merge is on: `<skill-dir>/scripts/reviewer-config.sh get-auto-merge` prints `on`
+  (the default). Turn it off with `set-auto-merge off` if the user asks.
+- The user hasn't said not to merge this one, and it isn't a draft.
+
+If any of these fail, don't merge. Leave the PR open and say what's missing in step 8.
+
+**Wait for CI:**
+
+```bash
+<skill-dir>/scripts/wait-for-checks.sh <pr>
+```
+
+- Exit 0: checks passed. If it printed "No CI checks configured", that counts as passing,
+  but say so in the report.
+- Exit 1: a check failed. Treat it like a review comment: find the cause (the failing
+  check's logs), fix it, run tests, commit `Fix CI: <what>`, and push. A fix changes code
+  the reviewer already approved, so run one more review round (step 3) if you're under 3
+  rounds. If you're at 3, don't merge; report it.
+- Exit 2: checks were still running after 30 minutes. Don't merge; report it.
+
+**Merge:**
+
+```bash
+<skill-dir>/scripts/merge-pr.sh <pr>
+```
+
+The script checks everything again right before merging. It refuses if the PR has
+unresolved threads, conflicts, failing checks, is out of date, is blocked by branch
+protection (such as a required human approval), or targets a branch other than the
+default one. It never bypasses branch protection. It pins the merge to the commit that
+was checked, so a push in the meantime stops it. It uses a merge commit when the repo
+allows one, which keeps the "Fixed in <sha>" replies pointing at real commits; pass
+`--method squash` or `--method rebase` only if the user asks.
+
+If it refuses, don't try to work around it. Report the reason.
+
+**Stacked PRs:** if this PR targets another PR's branch, merge that PR first, then
+retarget this one to the default branch
+(`gh api -X PATCH repos/<owner>/<repo>/pulls/<pr> -f base=<default>`) and merge it.
+Merging it into the other branch wouldn't put it on the default branch.
+
+## 8. Report back
 
 Give the user:
 
-- the PR link
+- the PR link, and whether it was **merged** (with the merge commit) or left open, and why
 - how many review rounds ran and the final verdict
 - who reviewed, and any fallback that happened with the reason (for example "Gemini CLI
   wasn't signed in, so Claude Opus reviewed"). If it came down to a self-review, say so
-  first: the PR still needs an independent review.
+  first: the PR still needs an independent review, so it wasn't merged.
+- the CI result, or that the repo has no CI
 - what was fixed (a short list, not every nit)
-- anything left open: pushed-back comments with your reason, or blockers that remain
-  after round 3
-
-**Never merge the PR.** Merging is the user's call.
+- anything left open: pushed-back comments with your reason, blockers that remain after
+  round 3, or what stopped the merge
