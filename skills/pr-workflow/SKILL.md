@@ -1,6 +1,6 @@
 ---
 name: pr-workflow
-description: Open a GitHub pull request for the current work, have an independent senior-engineer agent review it, post the review on the PR, fix the comments, and re-review until approved (max 3 rounds). Use when asked to open, create, raise or ship a PR, or to review and fix a PR, or "PR this".
+description: Open a GitHub pull request for the current work, have an independent senior-engineer reviewer (Claude, Codex, Gemini or Copilot; chosen once and remembered) review it, fix the comments, and re-review until approved (max 3 rounds). Use when asked to open, create, raise or ship a PR, to review and fix a PR, "PR this", or to change which AI reviews PRs.
 ---
 
 # PR Workflow
@@ -25,6 +25,30 @@ does the fixes, and the reviewer checks them on the next round.
   `gh api repos/<owner>/<repo>/pulls -f title=... -f head=<branch> -f base=<default> -F body=@<file>`.
   The scripts in `scripts/` already fall back to REST on their own.
 
+## 0b. Pick the reviewer (ask once, then remember)
+
+```bash
+<skill-dir>/scripts/reviewer-config.sh get
+```
+
+- **If it prints a reviewer, use it. Don't ask again.**
+- If it prints nothing, this is the first run. Ask the user **once** which AI should
+  review their PRs (use AskUserQuestion if available). Offer:
+  - **Claude Opus** (`claude-opus`), recommended: strongest reviewer, runs as a subagent
+    here with nothing extra to install
+  - **OpenAI Codex** (`codex`): needs the `codex` CLI installed and signed in
+  - **Google Gemini** (`gemini`): needs the `gemini` CLI installed and signed in
+  - **GitHub Copilot** (`copilot`): needs `gh` v2.88+ and a GitHub plan with Copilot code
+    review
+  - A typed answer of "Claude Sonnet" maps to `claude-sonnet` (faster, cheaper).
+
+  Save the answer: `<skill-dir>/scripts/reviewer-config.sh set <reviewer>`. It's stored
+  for the user across all repos, so later runs skip the question.
+- Change it only when the user asks (for example, "use Codex to review my PRs"): run
+  `set` with the new value. To be asked again, run `clear`.
+- If the saved reviewer's CLI is missing or not signed in, say so and ask whether to use
+  Claude Opus for this run. Don't change the saved choice unless they say to.
+
 ## 1. Get the branch ready
 
 - If on the default branch, create a branch: `git switch -c <type>/<short-slug>`
@@ -48,25 +72,40 @@ does the fixes, and the reviewer checks them on the next round.
 
 ## 3. Review round N (start at N = 1)
 
-Spawn the reviewer as a subagent:
+Run the review with the reviewer from step 0b. Every option gets the same instructions
+(`<skill-dir>/agents/senior-code-reviewer.md`), and **none** gets your own explanation of
+the change or why you made it. Fresh eyes are the point; the PR description is enough.
 
-- If a `senior-code-reviewer` agent type is available, use it.
-- Otherwise spawn a general-purpose agent and give it the full text of
-  `<skill-dir>/agents/senior-code-reviewer.md` (everything below the frontmatter) as its
-  instructions.
+**`claude-opus` or `claude-sonnet`:** spawn a subagent.
+- If a `senior-code-reviewer` agent type is available, use it. Otherwise spawn a
+  general-purpose agent and give it the full text of the agent file (everything below the
+  frontmatter) as its instructions.
+- Set the model to match (`opus` or `sonnet`).
+- Tell it the repo path, PR number, base branch and round number, and to review with
+  `gh pr diff <n>` and `git diff origin/<base>...HEAD`. From round 2 on, also give it the
+  previous round's findings JSON and the replies posted on each thread.
+- Save its JSON reply to `.git/pr-workflow/round-N.json`. Check it with `jq -e .verdict`;
+  if it isn't valid JSON, ask the reviewer once to resend only the JSON.
 
-Tell it: the repo path, PR number, base branch, and round number, and to review with
-`gh pr diff <n>` and `git diff origin/<base>...HEAD`. On round 2 and later, also give it
-the previous round's findings JSON and the replies posted on each thread.
+**`codex` or `gemini`:** run the CLI in read-only mode. The script passes along the
+previous round and replies, and saves the JSON:
 
-**Don't** give it your own explanation of the change or why you made it. Fresh eyes are
-the point; the PR description is enough context.
+```bash
+<skill-dir>/scripts/run-external-reviewer.sh <codex|gemini> <pr> <base> N .git/pr-workflow/round-N.json [.git/pr-workflow/round-<N-1>.json]
+```
 
-Save its JSON reply to `.git/pr-workflow/round-N.json` (inside `.git` so it's never
-committed). Check it with `jq -e .verdict`. If it isn't valid JSON, ask the reviewer once
-to resend only the JSON.
+**`copilot`:** Copilot posts its own review on the PR, so there's no JSON and no step 4.
 
-## 4. Post the review
+```bash
+<skill-dir>/scripts/request-copilot-review.sh <pr>
+```
+
+When it returns, go straight to step 5. Copilot can't see replies to its comments, so on
+re-review it judges the new code only.
+
+The `.git/pr-workflow/` folder sits inside `.git`, so these files are never committed.
+
+## 4. Post the review (skip for Copilot)
 
 ```bash
 <skill-dir>/scripts/post-review.sh <pr> .git/pr-workflow/round-N.json N
@@ -113,7 +152,8 @@ resolved. Skip threads that already have a "Fixed in" or "Not changed" reply.
 Go back to step 3 with N + 1. Stop when either:
 
 - the verdict is `approve` and no reviewer threads are left unresolved except ones you
-  pushed back on, or
+  pushed back on (for Copilot, which gives no verdict: its latest review added no new
+  comments), or
 - you've finished round 3. Don't loop past 3; if blockers remain, a human needs to look.
 
 ## 7. Report back

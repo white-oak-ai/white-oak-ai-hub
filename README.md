@@ -67,7 +67,14 @@ a zip with `SKILL.md` at its root isn't recognized as a skill.
 
 | Skill | Needs | Best in |
 |---|---|---|
-| `pr-workflow` | `git`, `gh` signed in (`gh auth login`), `jq` | Claude Code, which can reach your repo and GitHub |
+| `pr-workflow` | `git`, `gh` signed in (`gh auth login`), `jq`, `python3`. Plus whichever reviewer you pick: nothing extra for Claude; the `codex` CLI for Codex; the `gemini` CLI for Gemini; `gh` v2.88+ and Copilot code review on your plan for Copilot | Claude Code, which can reach your repo and GitHub |
+
+**Choosing the PR reviewer.** The first time you run `pr-workflow`, it asks which AI
+should review your PRs: Claude Opus (recommended), Claude Sonnet, OpenAI Codex, Google
+Gemini or GitHub Copilot. It saves the answer to
+`~/.config/white-oak-ai-hub/pr-workflow.json` and doesn't ask again. To switch, tell
+Claude something like "use Gemini to review my PRs", or run
+`skills/pr-workflow/scripts/reviewer-config.sh set <claude-opus|claude-sonnet|codex|gemini|copilot>`.
 
 ### Subagents
 
@@ -106,7 +113,7 @@ white-oak-ai-hub/
 
 | Skill | What it does |
 |---|---|
-| [`pr-workflow`](skills/pr-workflow/SKILL.md) | Opens a PR, has an independent senior-engineer agent review it, posts the review, fixes the comments, and re-reviews (max 3 rounds). Never merges. |
+| [`pr-workflow`](skills/pr-workflow/SKILL.md) | Opens a PR, has an independent senior-engineer reviewer (Claude, Codex, Gemini or Copilot, chosen once and remembered) review it, fixes the comments, and re-reviews (max 3 rounds). Never merges. |
 
 ## Creating a skill
 
