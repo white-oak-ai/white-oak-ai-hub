@@ -38,8 +38,8 @@ repo="$(repo_slug)" || exit 1
 refuse() { echo "Not merging PR #$pr: $*" >&2; exit 1; }
 
 $dry_run || [[ -n "$expected_sha" ]] || refuse "pass --sha <the commit the final review approved>."
-if [[ -n "$expected_sha" ]] && (( ${#expected_sha} < 7 )); then
-  refuse "--sha must be at least 7 characters."
+if [[ -n "$expected_sha" && ! "$expected_sha" =~ ^[0-9a-f]{40}$ ]]; then
+  refuse "--sha must be the full 40-character commit SHA."
 fi
 
 repo_json="$(gh api "repos/$repo")" || refuse "couldn't read the repo settings."
@@ -60,7 +60,7 @@ base="$(jq -r .base.ref <<<"$pr_json")"
   || refuse "it targets '$base', not '$default_branch'."
 
 head_sha="$(jq -r .head.sha <<<"$pr_json")"
-if [[ -n "$expected_sha" && "$head_sha" != "$expected_sha"* ]]; then
+if [[ -n "$expected_sha" && "$head_sha" != "$expected_sha" ]]; then
   refuse "the PR head is now ${head_sha:0:7}, not the approved ${expected_sha:0:7}. New commits need a review first."
 fi
 
@@ -73,9 +73,11 @@ open_threads="$(jq 'length' <<<"$threads" 2>/dev/null || echo "?")"
 reviews="$(gh api --paginate "repos/$repo/pulls/$pr/reviews?per_page=100" | jq -s 'add // []')" \
   || refuse "couldn't read the PR's reviews."
 blocking="$(jq -r '
-  [.[] | select(.state != "COMMENTED" and .state != "PENDING")]
-  | group_by(.user.login) | map(max_by(.submitted_at))
-  | map(select(.state == "CHANGES_REQUESTED") | .user.login) | join(", ")' <<<"$reviews")"
+  [.[] | select(.state != "COMMENTED" and .state != "PENDING")
+       | .who = (.user.login // "(unknown user)")]
+  | group_by(.who) | map(max_by(.submitted_at))
+  | map(select(.state == "CHANGES_REQUESTED") | .who) | join(", ")' <<<"$reviews")" \
+  || refuse "couldn't evaluate the PR's reviews."
 [[ -z "$blocking" ]] || refuse "changes were requested by: $blocking."
 
 case "$state" in

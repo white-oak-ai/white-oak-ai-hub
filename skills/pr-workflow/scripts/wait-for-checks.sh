@@ -30,7 +30,11 @@ done
 
 repo="$(repo_slug)" || exit 2
 sha="$(pr_head_sha "$pr")" || { echo "Couldn't read the PR head." >&2; exit 2; }
-if [[ "$sha" != "$expected_sha"* ]]; then
+if [[ ! "$expected_sha" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "--sha must be the full 40-character commit SHA." >&2
+  exit 2
+fi
+if [[ "$sha" != "$expected_sha" ]]; then
   echo "The PR head is ${sha:0:7}, not the approved ${expected_sha:0:7}. New commits need a review first." >&2
   exit 3
 fi
@@ -49,7 +53,6 @@ while :; do
            --jq '.check_runs[] | {name, status, conclusion}' 2>/dev/null)" || ok=false
   statuses="$(gh api --paginate "repos/$repo/commits/$sha/status?per_page=100" \
                --jq '.statuses[] | {name: .context, state}' 2>/dev/null)" || ok=false
-  workflows="$(gh api "repos/$repo/actions/workflows" --jq .total_count 2>/dev/null)" || ok=false
 
   if ! $ok; then
     api_trouble="GitHub's checks API couldn't be read"
@@ -76,7 +79,10 @@ while :; do
         exit 0
       fi
     elif (( now >= grace_until )); then
-      if (( workflows == 0 )); then
+      # Only needed when nothing has reported. A failed call means "unknown": keep polling.
+      if ! workflows="$(gh api "repos/$repo/actions/workflows" --jq .total_count 2>/dev/null)"; then
+        api_trouble="GitHub's Actions API couldn't be read"
+      elif (( workflows == 0 )); then
         # No Actions workflows and no commit statuses (external CI) after the grace period.
         echo "No CI checks configured for this repo."
         exit 0

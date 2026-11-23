@@ -192,12 +192,20 @@ resolved. Skip threads that already have a "Fixed in" or "Not changed" reply.
 
 ## 6. Re-review
 
-Go back to step 3 with N + 1. Stop when either:
+Go back to step 3 with N + 1. Any push after a review needs another round, **even when
+that review approved**: only an approved `<reviewed-sha>` can be merged, and fixing an
+approving round's minor comments moves the head. Stop when either:
 
 - the verdict is `approve` and no reviewer threads are left unresolved except ones you
   pushed back on (for Copilot, which gives no verdict: its latest review added no new
   comments), or
 - you've finished round 3. Don't loop past 3; if blockers remain, a human needs to look.
+
+**At the round limit:** if round 3 approves but leaves `minor` or `nit` comments, don't
+push fixes, which would leave the head unreviewed and unmergeable. Reply on each thread
+`Deferred to a follow-up: round limit reached`, resolve it, and list it in the report so
+the user can pick it up. `blocker` and `major` comments are never deferred; they mean the
+PR isn't approved.
 
 ## 7. Wait for checks, then merge
 

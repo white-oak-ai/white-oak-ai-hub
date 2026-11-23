@@ -29,6 +29,9 @@ done
 pr="${pos[0]:?Usage: post-review.sh <pr-number> <findings.json> [round] [--reviewer label] [--dry-run]}"
 findings="${pos[1]:?findings.json path required}"
 round="${pos[2]:-1}"
+if [[ -n "$reviewed_sha" && ! "$reviewed_sha" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "Error: --sha must be the full 40-character commit SHA." >&2; exit 1
+fi
 
 jq -e '.verdict and (.comments | type == "array")' "$findings" >/dev/null \
   || { echo "Error: $findings is not valid reviewer JSON (needs verdict and comments[])." >&2; exit 1; }
