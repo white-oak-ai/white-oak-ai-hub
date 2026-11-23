@@ -2,6 +2,83 @@
 
 Shared AI resources for White Oak: Claude skills, prompts, agents and MCP configs.
 
+## Installing skills
+
+Start by cloning the repo:
+
+```bash
+git clone https://github.com/white-oak-ai/white-oak-ai-hub.git
+cd white-oak-ai-hub
+```
+
+### Claude Code
+
+Claude Code picks up skills from two places:
+
+- `~/.claude/skills/`: available in every project (personal)
+- `.claude/skills/` inside a project: available in that project only, and shared with
+  anyone who clones it
+
+**Symlink (recommended).** Running `git pull` in this repo then updates the skill too.
+
+```bash
+mkdir -p ~/.claude/skills
+ln -s "$PWD/skills/pr-workflow" ~/.claude/skills/pr-workflow
+```
+
+**Copy.** Use this to pin a version or to commit the skill into a project.
+
+```bash
+mkdir -p .claude/skills
+cp -R /path/to/white-oak-ai-hub/skills/pr-workflow .claude/skills/
+```
+
+**All skills at once:**
+
+```bash
+mkdir -p ~/.claude/skills
+for s in skills/*/; do ln -sfn "$PWD/$s" ~/.claude/skills/"$(basename "$s")"; done
+```
+
+Start a new Claude Code session afterward so it loads the skills.
+
+### Claude apps (web, desktop, mobile)
+
+1. Build the zip:
+   ```bash
+   ./scripts/package-skill.sh pr-workflow   # creates dist/pr-workflow.zip
+   ./scripts/package-skill.sh --all         # or one zip per skill
+   ```
+2. In Claude, go to **Customize > Skills**, click **+**, choose **Create skill**, then
+   **Upload a skill**, and pick the zip.
+3. Make sure **Code execution and file creation** is turned on in Settings, since skills
+   need it.
+
+Skills you upload are private to your account until you share them. Team and
+Enterprise owners can upload a skill under **Organization settings > Plugins & skills**
+to give it to everyone in the organization. Skills enabled in your Claude account also
+load in Claude Code when you sign in with the same account.
+
+Upload the zip this script builds rather than zipping the folder by hand. Claude needs
+the skill folder at the top of the zip (`pr-workflow.zip` → `pr-workflow/SKILL.md`), and
+a zip with `SKILL.md` at its root isn't recognized as a skill.
+
+### Skill requirements
+
+| Skill | Needs | Best in |
+|---|---|---|
+| `pr-workflow` | `git`, `gh` signed in (`gh auth login`), `jq` | Claude Code, which can reach your repo and GitHub |
+
+### Subagents
+
+`pr-workflow` works without extra setup. To also make its reviewer available as a
+standalone agent in Claude Code:
+
+```bash
+mkdir -p ~/.claude/agents
+ln -s "$PWD/skills/pr-workflow/agents/senior-code-reviewer.md" ~/.claude/agents/
+```
+
 ## Layout
 
 ```
@@ -21,18 +98,15 @@ white-oak-ai-hub/
 │       └── SKILL.md        # copy this to start a new skill
 └── scripts/
     ├── new-skill.sh        # scaffold a new skill from the template
-    └── validate.sh         # check every SKILL.md has valid frontmatter
+    ├── validate.sh         # check every SKILL.md has valid frontmatter
+    └── package-skill.sh    # zip a skill for upload to the Claude apps
 ```
 
 ## Skills
 
 | Skill | What it does |
 |---|---|
-| [`pr-workflow`](skills/pr-workflow/SKILL.md) | Opens a PR, has an independent senior-engineer agent review it, posts the review, fixes the comments, and re-reviews (max 3 rounds). Never merges. Needs `gh` and `jq`. |
-
-**Optional:** to make the reviewer available as its own agent in Claude Code, copy
-`skills/pr-workflow/agents/senior-code-reviewer.md` into `~/.claude/agents/`. The skill
-works without this step.
+| [`pr-workflow`](skills/pr-workflow/SKILL.md) | Opens a PR, has an independent senior-engineer agent review it, posts the review, fixes the comments, and re-reviews (max 3 rounds). Never merges. |
 
 ## Creating a skill
 
@@ -54,11 +128,6 @@ Then edit `skills/my-new-skill/SKILL.md`.
 ```bash
 ./scripts/validate.sh
 ```
-
-## Installing a skill
-
-- **Claude Code:** copy or symlink a skill folder into `~/.claude/skills/` (personal) or `.claude/skills/` in a project.
-- **Claude apps:** zip the skill folder and upload it under Settings → Capabilities → Skills.
 
 ## License
 
