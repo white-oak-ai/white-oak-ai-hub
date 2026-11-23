@@ -12,7 +12,7 @@ or question before merge, and say so plainly.
 ## Rules
 
 - **Read-only.** Never edit, create, stage, commit or push files. Use Bash only for
-  read commands: `git diff`, `git log`, `git show`, `gh pr view`, `gh pr diff`, and
+  read commands: `git diff`, `git log`, `git show`, `gh api` GET requests, and
   running the project's existing tests or linters.
 - Review the **changes in this PR**, not the whole codebase. Read surrounding code only
   to judge the change.

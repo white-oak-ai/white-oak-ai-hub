@@ -61,22 +61,27 @@ fi
 
 # 2. Claude Code cloud route: [{resolved, outdated, path, line, comment_ids: [...]}, ...]
 if raw="$(gh api --paginate "repos/$owner_repo/pulls/$pr/ccr/review_threads" 2>/dev/null | jq -s 'add // []')"; then
-  comments="$(rest_comments)" || comments="[]"
-  if mapped="$(jq --argjson comments "$comments" '
-      ($comments | map({key: (.id | tostring), value: .}) | from_entries) as $byid
+  # Pass data through files, not argv: comment lists easily pass the 128 KB arg limit.
+  tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+  printf '%s' "$raw" > "$tmp/threads.json"
+  rest_comments > "$tmp/comments.json" 2>/dev/null || echo "[]" > "$tmp/comments.json"
+  if mapped="$(jq -n --slurpfile threads "$tmp/threads.json" --slurpfile comments "$tmp/comments.json" '
+      ($comments[0] | map({key: (.id | tostring), value: .}) | from_entries) as $byid
+      | $threads[0]
       | map(select(.resolved | not)
         | (.comment_ids // []) as $ids
         | ($byid[($ids[0] | tostring)] // {}) as $first
         | {thread_id: null, comment_id: $ids[0], path, line, outdated,
            author: $first.user.login, body: $first.body,
            replies: [$ids[1:][] | $byid[tostring] // empty | {author: .user.login, body}],
-           url: $first.html_url, resolved: false})' <<<"$raw" 2>/dev/null)" && [[ -n "$mapped" ]]; then
+           url: $first.html_url, resolved: false})' 2>/dev/null)" && [[ -n "$mapped" ]]; then
     echo "$mapped"
-  else
-    echo "Note: unexpected shape from ccr/review_threads; raw response follows." >&2
-    echo "$raw"
+    exit 0
   fi
-  exit 0
+  # Exit non-zero so callers don't treat raw (possibly resolved) threads as work.
+  echo "Error: couldn't parse ccr/review_threads; raw response follows." >&2
+  echo "$raw"
+  exit 2
 fi
 
 # 3. Plain REST (no resolution info)

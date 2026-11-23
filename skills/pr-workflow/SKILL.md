@@ -24,8 +24,10 @@ does the fixes, and the reviewer checks them on the next round.
 - Prefer `gh api` (REST) over `gh pr ...` and `gh repo view`. Those commands use GitHub
   GraphQL, which is blocked in Claude Code cloud sessions. The scripts in `scripts/`
   already use REST.
-- Set `WF="$(git rev-parse --git-dir)/pr-workflow"` and `mkdir -p "$WF"`. Review files
-  go here: inside the git dir, so they're never committed, and correct in worktrees too.
+- Find the review folder once: `d="$(git rev-parse --absolute-git-dir)/pr-workflow"; mkdir -p "$d"; echo "$d"`.
+  Use that printed absolute path, called `<wf>` below, **literally** in every later
+  command, because shell variables don't carry over between tool calls. It sits inside the
+  git dir, so the files are never committed, and it's correct in worktrees too.
 
 ## 0b. Pick the reviewer (ask once, then remember)
 
@@ -87,14 +89,14 @@ the change or why you made it. Fresh eyes are the point; the PR description is e
 - Tell it the repo path, PR number, base branch and round number, and to review with
   `git diff origin/<base>...HEAD`. From round 2 on, also give it the
   previous round's findings JSON and the replies posted on each thread.
-- Save its JSON reply to `$WF/round-N.json`. Check it with `jq -e .verdict`;
+- Save its JSON reply to `<wf>/round-N.json`. Check it with `jq -e .verdict`;
   if it isn't valid JSON, ask the reviewer once to resend only the JSON.
 
 **`codex` or `gemini`:** run the CLI in read-only mode. The script passes along the
 previous round and replies, and saves the JSON:
 
 ```bash
-<skill-dir>/scripts/run-external-reviewer.sh <codex|gemini> <pr> <base> N "$WF/round-N.json" ["$WF/round-<N-1>.json"]
+<skill-dir>/scripts/run-external-reviewer.sh <codex|gemini> <pr> <base> N <wf>/round-N.json [<wf>/round-<N-1>.json]
 ```
 
 **`copilot`:** Copilot posts its own review on the PR, so there's no JSON and no step 4.
@@ -110,7 +112,7 @@ re-review it judges the new code only.
 ## 4. Post the review (skip for Copilot)
 
 ```bash
-<skill-dir>/scripts/post-review.sh <pr> "$WF/round-N.json" N
+<skill-dir>/scripts/post-review.sh <pr> <wf>/round-N.json N
 ```
 
 This posts a GitHub review (event `COMMENT`, since GitHub blocks approving or requesting

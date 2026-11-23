@@ -26,7 +26,7 @@ prompt="$instructions
 - PR number: $pr
 - Base branch: $base
 - Round: $round
-- See the changes with: git diff origin/$base...HEAD   (or: gh pr diff $pr)"
+- See the changes with: git diff origin/$base...HEAD"
 
 if [[ -n "$prev" && -f "$prev" ]]; then
   # Replies newer than the previous round's findings file (all pages).

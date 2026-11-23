@@ -21,11 +21,3 @@ repo_slug() {
 pr_head_sha() {
   gh api "repos/$(repo_slug)/pulls/$1" --jq .head.sha
 }
-
-# Folder for per-PR working files, inside the git dir (works in worktrees too).
-workflow_dir() {
-  local d
-  d="$(git rev-parse --git-dir)/pr-workflow"
-  mkdir -p "$d"
-  echo "$d"
-}
