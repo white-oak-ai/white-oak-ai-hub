@@ -138,6 +138,8 @@ white-oak-ai-hub/
 └── scripts/
     ├── new-skill.sh        # scaffold a new skill from the template
     ├── validate.sh         # check every SKILL.md has valid frontmatter
+    ├── check-packaging.sh  # build every skill zip and check its layout
+    ├── check-permissions.sh # check scripts are executable and _libs aren't
     └── package-skill.sh    # zip a skill for upload to the Claude apps
 ```
 
@@ -168,6 +170,22 @@ Then edit `skills/my-new-skill/SKILL.md`.
 ```bash
 ./scripts/validate.sh
 ```
+
+## CI
+
+Every pull request and push to `main` runs `.github/workflows/ci.yml`. It needs no
+secrets. To run the same checks locally before pushing:
+
+```bash
+./scripts/validate.sh                           # SKILL.md frontmatter
+git ls-files -z '*.sh' | xargs -0 shellcheck -x # shell lint (config in .shellcheckrc)
+./scripts/check-permissions.sh                  # scripts +x, _lib files not
+./scripts/check-packaging.sh                    # every skill zips as <name>/SKILL.md
+```
+
+If shellcheck flags something intentional, such as a jq program in single quotes,
+disable that rule on the line above with a reason:
+`# shellcheck disable=SC2016  # jq program, must not expand`.
 
 ## License
 

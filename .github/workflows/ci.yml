@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate SKILL.md frontmatter
+        run: ./scripts/validate.sh
+
+      - name: Shellcheck
+        # shellcheck is preinstalled on GitHub's Ubuntu runners. -x follows the
+        # `source _lib.sh` lines (see .shellcheckrc).
+        run: |
+          shellcheck --version | head -2
+          git ls-files -z '*.sh' | xargs -0 shellcheck -x
+
+      - name: Script permissions
+        run: ./scripts/check-permissions.sh
+
+      - name: Skill packaging
+        run: ./scripts/check-packaging.sh

@@ -23,6 +23,7 @@ gh api -X POST "repos/$owner_repo/pulls/$pr/comments/$comment/replies" -f body="
 [[ "$resolve" == "--resolve" ]] || exit 0
 
 # Resolve: GraphQL first, then the Claude Code cloud route.
+# shellcheck disable=SC2016  # GraphQL query: $thread is a GraphQL variable, not a shell one
 if [[ "$thread" != "-" ]] && gh api graphql -F thread="$thread" -f query='
   mutation($thread: ID!) {
     resolveReviewThread(input: {threadId: $thread}) { thread { isResolved } }
