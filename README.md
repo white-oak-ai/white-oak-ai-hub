@@ -68,6 +68,7 @@ a zip with `SKILL.md` at its root isn't recognized as a skill.
 | Skill | Needs | Best in |
 |---|---|---|
 | `pr-workflow` | `git`, `gh` signed in (`gh auth login`), `jq`, `python3`. Plus whichever reviewer you pick: nothing extra for Claude; the `codex` CLI for Codex; the `gemini` CLI for Gemini; `gh` v2.88+ and Copilot code review on your plan for Copilot | Claude Code, which can reach your repo and GitHub |
+| `issue-workflow` | `git`, `gh` signed in (`gh auth login`) with permission to label, assign and close issues, `jq`, and the `pr-workflow` skill installed alongside it (plus that skill's needs) | Claude Code, which can reach your repo and GitHub |
 
 **Choosing the PR reviewer.** The first time you run `pr-workflow`, it asks which AI
 should review your PRs: Claude Opus (recommended), Claude Sonnet, OpenAI Codex, Google
@@ -96,6 +97,16 @@ CI counts as passing, and the report says so. It only merges the exact commit th
 reviewer approved: anything pushed afterward needs another review. A human's "Request
 changes" review or an objection in the PR conversation also blocks it. To turn merging off and keep PRs open for
 you: `skills/pr-workflow/scripts/reviewer-config.sh set-auto-merge off`.
+
+**Picking up issues.** `issue-workflow` ranks open issues by value ÷ risk using
+[`references/scoring.md`](skills/issue-workflow/references/scoring.md), and only claims
+one after a readiness check passes (unblocked, clear outcome, tests run here, nothing
+missing). Claiming assigns you and adds an `in-progress` label (created if missing). If
+the work can't be finished, it releases the claim with a comment; if the PR is left
+open, the issue stays in progress with a status comment and is closed only after the
+merge. Set `ISSUE_WORKFLOW_LABEL` to use a different label and
+`ISSUE_WORKFLOW_SKIP_LABELS` (comma-separated) to change which labels are never picked.
+Install it next to `pr-workflow`, since it hands the PR off to that skill.
 
 ### Subagents
 
@@ -135,6 +146,7 @@ white-oak-ai-hub/
 | Skill | What it does |
 |---|---|
 | [`pr-workflow`](skills/pr-workflow/SKILL.md) | Opens a PR, has an independent senior-engineer reviewer (Claude, Codex, Gemini or Copilot, chosen once and remembered) review it, fixes the comments, re-reviews (max 3 rounds), then merges once every comment is addressed and CI passes. |
+| [`issue-workflow`](skills/issue-workflow/SKILL.md) | Picks the open issue with the most value for the least risk (or the one you name), checks it's ready to work on, marks it in progress, implements and tests the fix, ships it through `pr-workflow`, then closes the issue once the PR merges. |
 
 ## Creating a skill
 
