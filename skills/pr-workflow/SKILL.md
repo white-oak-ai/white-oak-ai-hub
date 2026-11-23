@@ -50,8 +50,9 @@ does the fixes, and the reviewer checks them on the next round.
   for the user across all repos, so later runs skip the question.
 - Change it only when the user asks (for example, "use Codex to review my PRs"): run
   `set` with the new value. To be asked again, run `clear`.
-- If the saved reviewer's CLI is missing or not signed in, say so and ask whether to use
-  Claude Opus for this run. Don't change the saved choice unless they say to.
+- Don't ask about fallbacks. They default to Claude Opus, then Claude Sonnet (see step 3).
+  Change them only when the user asks:
+  `<skill-dir>/scripts/reviewer-config.sh set-fallbacks claude-sonnet,codex`.
 
 ## 1. Get the branch ready
 
@@ -77,9 +78,35 @@ does the fixes, and the reviewer checks them on the next round.
 
 ## 3. Review round N (start at N = 1)
 
-Run the review with the reviewer from step 0b. Every option gets the same instructions
-(`<skill-dir>/agents/senior-code-reviewer.md`), and **none** gets your own explanation of
-the change or why you made it. Fresh eyes are the point; the PR description is enough.
+Every reviewer gets the same instructions (`<skill-dir>/agents/senior-code-reviewer.md`),
+and **none** gets your own explanation of the change or why you made it. Fresh eyes are
+the point; the PR description is enough.
+
+### Pick who reviews this round (with fallback)
+
+```bash
+<skill-dir>/scripts/reviewer-chain.sh
+```
+
+This lists, in order: the saved reviewer, the fallbacks (default `claude-opus`, then
+`claude-sonnet`), and `self` last. Each line says `ready` or `unavailable`. Go down the
+list:
+
+1. Skip `unavailable` lines.
+2. Try the first `ready` one, as described below.
+3. If it **fails**, note why in a few words and try the next. Failing means: the script
+   exits non-zero (3 not installed, 4 timed out, 5 errored or not signed in, or Copilot
+   didn't respond in time), the subagent tool isn't available in this session, or the
+   reviewer returns invalid JSON twice.
+4. Remember who reviewed and why any earlier one was skipped, for example
+   `Claude Opus (fallback: Gemini CLI not signed in)`. Pass it to step 4 as `--reviewer`
+   and include it in the step 7 report.
+
+**Don't stop to ask the user about a fallback.** The chain is the answer. Don't change
+the saved reviewer either; next PR starts from the top of the list again.
+
+Use the same reviewer for later rounds of this PR unless it fails; then continue down the
+list from there.
 
 **`claude-opus` or `claude-sonnet`:** spawn a subagent.
 - If a `senior-code-reviewer` agent type is available, use it. Otherwise spawn a
@@ -108,11 +135,18 @@ previous round and replies, and saves the JSON:
 When it returns, go straight to step 5. Copilot can't see replies to its comments, so on
 re-review it judges the new code only.
 
+**`self` (last resort):** use this only when every other reviewer failed. Review the diff
+yourself, following the reviewer instructions as strictly as you can: read the full diff
+fresh, as if someone else wrote it, and return the same JSON. Save it to
+`<wf>/round-N.json` and post it with `--reviewer "Self-review (no independent reviewer
+available: <reasons>)"`. A self-review can't confirm its own fixes, so do **one** round
+only, then stop and tell the user plainly that the PR still needs an independent review.
+
 
 ## 4. Post the review (skip for Copilot)
 
 ```bash
-<skill-dir>/scripts/post-review.sh <pr> <wf>/round-N.json N
+<skill-dir>/scripts/post-review.sh <pr> <wf>/round-N.json N --reviewer "<who reviewed>"
 ```
 
 This posts a GitHub review (event `COMMENT`, since GitHub blocks approving or requesting
@@ -166,6 +200,9 @@ Give the user:
 
 - the PR link
 - how many review rounds ran and the final verdict
+- who reviewed, and any fallback that happened with the reason (for example "Gemini CLI
+  wasn't signed in, so Claude Opus reviewed"). If it came down to a self-review, say so
+  first: the PR still needs an independent review.
 - what was fixed (a short list, not every nit)
 - anything left open: pushed-back comments with your reason, or blockers that remain
   after round 3

@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # Remember which AI reviews PRs, so the skill asks only once.
 #
-# Usage: reviewer-config.sh get            -> prints the saved reviewer, or nothing
-#        reviewer-config.sh set <reviewer> -> saves it
-#        reviewer-config.sh clear          -> forgets it (the skill will ask again)
+# Usage: reviewer-config.sh get                     -> prints the saved reviewer, or nothing
+#        reviewer-config.sh set <reviewer>          -> saves it
+#        reviewer-config.sh clear                   -> forgets it (the skill will ask again)
+#        reviewer-config.sh get-fallbacks           -> fallback order, one per line
+#        reviewer-config.sh set-fallbacks <a,b,...> -> saves the fallback order
+#
+# Fallbacks are tried, in order, when the main reviewer can't run. The default is
+# claude-opus, then claude-sonnet.
 #
 # Reviewers: claude-opus | claude-sonnet | codex | gemini | copilot
 # Saved per user (not per repo) at:
@@ -40,7 +45,27 @@ case "${1:-}" in
     fi
     echo "Cleared saved PR reviewer."
     ;;
+  get-fallbacks)
+    if [[ -f "$file" ]] && jq -e '.fallbacks | type == "array" and length > 0' "$file" >/dev/null 2>&1; then
+      jq -r '.fallbacks[]' "$file"
+    else
+      printf '%s\n' claude-opus claude-sonnet
+    fi
+    ;;
+  set-fallbacks)
+    list="${2:?Usage: reviewer-config.sh set-fallbacks <reviewer,reviewer,...>}"
+    IFS=',' read -r -a items <<<"$list"
+    for r in "${items[@]}"; do
+      [[ " $valid " == *" $r "* ]] || { echo "Error: '$r' isn't a reviewer. Use: $valid" >&2; exit 1; }
+    done
+    mkdir -p "$dir"
+    existing="{}"
+    if [[ -f "$file" ]] && jq -e . "$file" >/dev/null 2>&1; then existing="$(cat "$file")"; fi
+    jq --arg l "$list" '.fallbacks = ($l | split(","))' <<<"$existing" > "$file.tmp"
+    mv "$file.tmp" "$file"
+    echo "Saved fallback order: ${list//,/ → }"
+    ;;
   *)
-    echo "Usage: $0 get | set <reviewer> | clear" >&2; exit 1
+    echo "Usage: $0 get | set <reviewer> | clear | get-fallbacks | set-fallbacks <a,b,...>" >&2; exit 1
     ;;
 esac

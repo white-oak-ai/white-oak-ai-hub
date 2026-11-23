@@ -76,6 +76,17 @@ Gemini or GitHub Copilot. It saves the answer to
 Claude something like "use Gemini to review my PRs", or run
 `skills/pr-workflow/scripts/reviewer-config.sh set <claude-opus|claude-sonnet|codex|gemini|copilot>`.
 
+**If the reviewer isn't available.** When your reviewer can't run (CLI not installed,
+not signed in, timed out after 10 minutes, or returned no usable review), the skill moves
+to the next reviewer on its own instead of stopping. The default order is your reviewer,
+then Claude Opus, then Claude Sonnet. Each review on the PR names who reviewed it and why
+any fallback happened. If nothing else can run, the skill does a single self-review,
+clearly labeled, and tells you the PR still needs an independent review.
+
+To change the fallback order:
+`skills/pr-workflow/scripts/reviewer-config.sh set-fallbacks claude-sonnet,codex`.
+To change the time limit for the Codex and Gemini CLIs, set `PR_REVIEW_TIMEOUT` (seconds).
+
 ### Subagents
 
 `pr-workflow` works without extra setup. To also make its reviewer available as a

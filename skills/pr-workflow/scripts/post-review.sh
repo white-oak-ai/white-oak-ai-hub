@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Post the senior reviewer's findings to a PR as a GitHub review with inline comments.
 #
-# Usage: post-review.sh <pr-number> <findings.json> [round] [--dry-run]
+# Usage: post-review.sh <pr-number> <findings.json> [round] [--reviewer "<label>"] [--dry-run]
+#
+# --reviewer names who did the review in the header, e.g. "Claude Opus" or
+# "Claude Opus (fallback: Gemini CLI not signed in)", so the PR shows when a fallback ran.
 #
 # Always posts with event=COMMENT: GitHub doesn't let you APPROVE or REQUEST_CHANGES
 # on your own PR, and the review runs under the author's gh login.
@@ -10,12 +13,18 @@
 set -euo pipefail
 source "$(dirname "$0")/_lib.sh"
 
-pr="${1:?Usage: post-review.sh <pr-number> <findings.json> [round] [--dry-run]}"
-findings="${2:?findings.json path required}"
-round="${3:-1}"
-dry_run=false
-for arg in "$@"; do [[ "$arg" == "--dry-run" ]] && dry_run=true; done
-[[ "$round" == "--dry-run" ]] && round=1
+dry_run=false; reviewer=""; pos=()
+while (( $# )); do
+  case "$1" in
+    --dry-run) dry_run=true ;;
+    --reviewer) reviewer="${2:?--reviewer needs a label}"; shift ;;
+    *) pos+=("$1") ;;
+  esac
+  shift
+done
+pr="${pos[0]:?Usage: post-review.sh <pr-number> <findings.json> [round] [--reviewer label] [--dry-run]}"
+findings="${pos[1]:?findings.json path required}"
+round="${pos[2]:-1}"
 
 jq -e '.verdict and (.comments | type == "array")' "$findings" >/dev/null \
   || { echo "Error: $findings is not valid reviewer JSON (needs verdict and comments[])." >&2; exit 1; }
@@ -31,11 +40,12 @@ fi
 comment_md='"**[\(.severity)] \(.title)**\n\n\(.body)"
   + (if (.suggestion // "") != "" then "\n\n```suggestion\n\(.suggestion)\n```" else "" end)'
 
-header="$(jq -r --arg round "$round" '
+header="$(jq -r --arg round "$round" --arg reviewer "$reviewer" '
   def count(s): [.comments[] | select(.severity == s)] | length;
   "## Senior review — round \($round)\n\n"
   + "**Verdict:** \(if .verdict == "approve" then "✅ approve" else "🔁 changes requested" end)"
   + "  ·  \(count("blocker")) blocker, \(count("major")) major, \(count("minor")) minor, \(count("nit")) nit\n\n"
+  + (if $reviewer != "" then "**Reviewer:** \($reviewer)\n\n" else "" end)
   + .summary' "$findings")"
 marker=$'\n\n<!-- pr-workflow:senior-review -->'
 

@@ -6,6 +6,12 @@
 #
 # Uses the same instructions as the Claude reviewer (agents/senior-code-reviewer.md), so
 # the output format matches and post-review.sh works unchanged.
+#
+# Exit codes, so the skill knows to fall back to the next reviewer:
+#   0  findings saved
+#   3  CLI not installed
+#   4  timed out (default 10 min; set PR_REVIEW_TIMEOUT in seconds)
+#   5  CLI failed (often not signed in) or returned no findings JSON
 set -euo pipefail
 source "$(dirname "$0")/_lib.sh"
 
@@ -54,19 +60,47 @@ mkdir -p "$(dirname "$out")"
 
 # Keep the raw CLI output if anything fails, so it can be inspected.
 raw="$(mktemp)"
-trap 'rc=$?; if (( rc )); then echo "Raw CLI output kept at $raw" >&2; else rm -f "$raw"; fi' EXIT
+trap 'rc=$?; if (( rc )) && [[ -s "$raw" || -s "$raw.err" ]]; then echo "Raw CLI output kept at $raw (errors: $raw.err)" >&2; else rm -f "$raw" "$raw.err"; fi; rm -f "$raw.timedout"' EXIT
 
+# Run a command with stdin closed (so a sign-in prompt can't hang it) and a time limit.
+# Portable: macOS has no `timeout` command by default.
+run_with_timeout() {
+  local secs="$1"; shift
+  # Own process group, so a timeout stops the CLI and every process it launched.
+  set -m
+  "$@" </dev/null &
+  local pid=$! rc=0
+  set +m
+  # Watcher: if the time limit passes, record it and stop the whole group. If it's
+  # cancelled first, it stops its own sleep so nothing is left running.
+  ( trap 'kill "$s" 2>/dev/null; exit 0' TERM
+    sleep "$secs" & s=$!; wait "$s"
+    trap '' TERM   # the limit passed: don't let a cancel skip the KILL below
+    : > "$raw.timedout"
+    kill -TERM -- -"$pid" 2>/dev/null
+    sleep 5; kill -KILL -- -"$pid" 2>/dev/null ) &
+  local watcher=$!
+  wait "$pid" || rc=$?
+  kill "$watcher" 2>/dev/null; wait "$watcher" 2>/dev/null || true
+  return "$rc"
+}
+
+limit="${PR_REVIEW_TIMEOUT:-600}"
 case "$tool" in
-  codex)
-    command -v codex >/dev/null || { echo "Error: codex CLI not installed (npm i -g @openai/codex)." >&2; exit 1; }
-    codex exec --sandbox read-only "$prompt" > "$raw"
-    ;;
-  gemini)
-    command -v gemini >/dev/null || { echo "Error: gemini CLI not installed (npm i -g @google/gemini-cli)." >&2; exit 1; }
-    gemini --approval-mode plan -p "$prompt" > "$raw"
-    ;;
+  codex)  cmd=(codex exec --sandbox read-only "$prompt");          install="npm i -g @openai/codex" ;;
+  gemini) cmd=(gemini --approval-mode plan -p "$prompt");          install="npm i -g @google/gemini-cli" ;;
   *) echo "Error: tool must be codex or gemini." >&2; exit 1 ;;
 esac
+command -v "$tool" >/dev/null || { echo "Unavailable: $tool CLI not installed ($install)." >&2; exit 3; }
+
+rc=0
+run_with_timeout "$limit" "${cmd[@]}" > "$raw" 2> "$raw.err" || rc=$?
+if [[ -e "$raw.timedout" ]] || (( rc == 143 )); then
+  echo "Unavailable: $tool timed out after ${limit}s." >&2; exit 4
+elif (( rc != 0 )); then
+  echo "Unavailable: $tool exited with code $rc (often means it isn't signed in). Last error lines:" >&2
+  tail -n 5 "$raw.err" >&2; exit 5
+fi
 
 # Pull the last valid JSON object with a "verdict" out of the CLI's output.
 python3 - "$raw" "$out" <<'PY'
@@ -82,7 +116,8 @@ while (i := text.find("{", i)) != -1:
     except json.JSONDecodeError:
         i += 1
 if not found:
-    sys.exit("Error: no reviewer JSON found in the CLI output.")
+    print("Unavailable: no reviewer JSON found in the CLI output.", file=sys.stderr)
+    sys.exit(5)
 found.setdefault("comments", [])
 json.dump(found, open(sys.argv[2], "w"), indent=2)
 print(f"Saved {sys.argv[2]}: verdict={found['verdict']}, {len(found['comments'])} comment(s)")
