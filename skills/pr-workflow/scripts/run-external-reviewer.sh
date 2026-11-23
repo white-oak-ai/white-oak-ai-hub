@@ -75,6 +75,7 @@ run_with_timeout() {
   # cancelled first, it stops its own sleep so nothing is left running.
   ( trap 'kill "$s" 2>/dev/null; exit 0' TERM
     sleep "$secs" & s=$!; wait "$s"
+    trap '' TERM   # the limit passed: don't let a cancel skip the KILL below
     : > "$raw.timedout"
     kill -TERM -- -"$pid" 2>/dev/null
     sleep 5; kill -KILL -- -"$pid" 2>/dev/null ) &
