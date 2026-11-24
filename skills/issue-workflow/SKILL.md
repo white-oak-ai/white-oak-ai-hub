@@ -17,15 +17,16 @@ readiness check. If you stop for any reason before the PR merges, either leave a
 saying where things stand (PR open) or release the claim (no PR). Never leave an issue
 labeled in progress with nobody working on it.
 
-## 0. Check prerequisites
+## 0. Check prerequisites & environment
 
+- Read environment configuration: check `<skill-dir>/references/environment.md` or `config/environment.local.yaml` (run `./scripts/setup-environment.sh --check` if in hub). If unconfigured or placeholders remain, run `./scripts/setup-environment.sh --init` to configure target repo, tracker, and labels.
 - `gh auth status` succeeds, the folder is a git repo with a GitHub remote, and `jq` is
   installed. If `gh` isn't signed in, stop and tell the user to run `gh auth login`.
-- Get `<owner>/<repo>` from `git remote get-url origin` and the default branch from
-  `gh api repos/<owner>/<repo> --jq .default_branch`.
+- Target repo `<owner>/<repo>`: use `default_repo` from environment config (or match issue prefix to registered repo in `repos[]`), falling back to `git remote get-url origin`. Default branch is from environment config or `gh api repos/<owner>/<repo> --jq .default_branch`.
 - Use `gh api` (REST) for everything, never `gh issue ...`, `gh pr ...` or `gh repo view`:
   those use GraphQL, which is blocked in Claude Code cloud sessions. The scripts in
   `scripts/` already use REST.
+- Ticketing connector: use connector specified in environment config (`ticketing.connector`, e.g. `github`, `linear`, `jira`).
 - The `pr-workflow` skill must be available (step 6). Check now so you don't find out
   after doing the work: it's either in your skills list or at `<skill-dir>/../pr-workflow/SKILL.md`.
   If it's missing, stop and tell the user to install it.
@@ -34,11 +35,11 @@ labeled in progress with nobody working on it.
 - Make a scratch folder for notes: `d="$(git rev-parse --absolute-git-dir)/issue-workflow"; mkdir -p "$d"; echo "$d"`.
   Use the printed path, called `<wf>` below, literally in later commands.
 
-Settings (environment variables, all optional):
-- `ISSUE_WORKFLOW_LABEL`: the in-progress label. Default `in-progress`; created if missing.
+Settings (loaded from environment config `ticketing.workflow_states`, or environment variables):
+- `ISSUE_WORKFLOW_LABEL`: the in-progress label. Default `in-progress` (or from environment config); created if missing.
 - `ISSUE_WORKFLOW_SKIP_LABELS`: comma-separated labels that are never picked. Default
   `blocked, on-hold, wontfix, duplicate, invalid, question, needs-design,
-  needs-discussion, needs-info, needs-triage, epic, discussion`.
+  needs-discussion, needs-info, needs-triage, epic, discussion` (or from environment config).
 
 ## 1. Find candidates
 

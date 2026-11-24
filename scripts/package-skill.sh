@@ -14,7 +14,22 @@ package() {
   local name="$1"
   [[ -f "$root/skills/$name/SKILL.md" ]] || { echo "Error: skills/$name/SKILL.md not found." >&2; return 1; }
   rm -f "$root/dist/$name.zip"
-  (cd "$root/skills" && zip -qr "$root/dist/$name.zip" "$name" -x '*/.gitkeep' '*/.DS_Store')
+
+  # Include setup-environment.sh in standalone package if not already present
+  local cleanup_setup=0
+  if [[ ! -f "$root/skills/$name/scripts/setup-environment.sh" && -f "$root/scripts/setup-environment.sh" ]]; then
+    mkdir -p "$root/skills/$name/scripts"
+    cp "$root/scripts/setup-environment.sh" "$root/skills/$name/scripts/setup-environment.sh"
+    chmod 755 "$root/skills/$name/scripts/setup-environment.sh"
+    cleanup_setup=1
+  fi
+
+  (cd "$root/skills" && zip -qr "$root/dist/$name.zip" "$name" -x '*/.gitkeep' '*/.DS_Store' '*/*.local.*')
+
+  if [[ $cleanup_setup -eq 1 ]]; then
+    rm -f "$root/skills/$name/scripts/setup-environment.sh"
+  fi
+
   echo "Built dist/$name.zip"
 }
 

@@ -11,5 +11,6 @@ description: Example skill showing the repo's structure. Use only as a reference
 
 ## Steps
 
+0. Check `references/environment.md` or `config/environment.local.yaml` for repository targets, tracker, and conventions.
 1. Read this file to see the frontmatter and section layout.
 2. Copy `templates/skill-template/` (or run `scripts/new-skill.sh <name>`) to start a real skill.

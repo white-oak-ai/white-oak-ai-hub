@@ -1,0 +1,69 @@
+# ==============================================================================
+# White Oak AI Hub - Environment Configuration Template
+# ==============================================================================
+# Copy this file to `config/environment.local.yaml` (or run `./scripts/setup-environment.sh`)
+# to customize for your team and project environment.
+#
+# IMPORTANT:
+# - NEVER put secrets, tokens, or credentials in this file.
+# - Use environment variables or official CLI auth (e.g. `gh auth login`, Linear API key env vars) for authentication.
+# - `environment.local.yaml` is git-ignored to prevent leaking local paths or internal configs.
+# ==============================================================================
+
+# Default target repository (slug e.g. "owner/repo" or registered name below)
+default_repo: "example-org/example-repo"
+
+# Registered repositories map
+# Allows skills to operate across multiple repositories without guessing paths or remotes
+repos:
+  - name: "main"
+    slug: "example-org/example-repo"
+    local_path: "."
+    default_branch: "main"
+    purpose: "Primary application codebase"
+    build_cmd: "npm run build"
+    test_cmd: "npm test"
+    # Issue prefixes routed to this repo (e.g., "CORE-123" -> main)
+    issue_prefixes:
+      - "CORE-"
+      - "APP-"
+
+# Ticketing & Task Tracking Configuration
+ticketing:
+  # Supported: github-issues, linear, jira, gitlab-issues, azure-boards, asana, clickup, notion
+  tracker: "github-issues"
+  # Project or team key (e.g. "example-org/example-repo" for GitHub, "CORE" for Jira/Linear)
+  project_key: "example-org/example-repo"
+  # Expected ticket ID format (regex or pattern)
+  ticket_format: "#[0-9]+"
+  # Suggested MCP connector to use when filing or reading tasks
+  connector: "github"
+  # Workflow states & labels
+  workflow_states:
+    in_progress_label: "in-progress"
+    quality_label: "quality"
+    skip_labels:
+      - "blocked"
+      - "on-hold"
+      - "wontfix"
+      - "duplicate"
+      - "invalid"
+      - "question"
+      - "needs-design"
+      - "needs-discussion"
+      - "needs-info"
+      - "needs-triage"
+      - "epic"
+      - "discussion"
+
+# Code & Git Conventions
+conventions:
+  # Branch naming pattern: available variables: {issue_id}, {slug}, {type}
+  branch_pattern: "feat/{issue_id}-{slug}"
+  # Commit format convention: "conventional" (feat: ...), "ticket-first" (CORE-123: ...), or "free"
+  commit_format: "conventional"
+  # Reviewer configuration for PR workflows (Claude, Codex, Gemini, Copilot, or specific username)
+  pr_reviewers:
+    - "senior-code-reviewer"
+  # Require continuous integration checks to pass before auto-merging
+  require_ci: true

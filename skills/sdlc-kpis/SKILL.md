@@ -17,7 +17,7 @@ act now), a trend against the previous period, the items driving it, and next st
 
 ## Steps
 
-1. **Pick scope.** The repo in the current directory, last 30 days unless the user says
+1. **Pick scope & check environment.** Read `config/environment.local.yaml` or `<skill-dir>/references/environment.md` for target repository (`default_repo`) and branch (`default_branch`). Defaults to the repo in the current directory, last 30 days unless the user says
    otherwise. Needs `jq`. For full data, `gh auth login` (REST only; no GraphQL). Without
    GitHub access the skill falls back to local git and says which KPIs it can't measure.
 2. **Run it:**
