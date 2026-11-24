@@ -1,0 +1,9 @@
+{
+  "_comment": "Traffic-light thresholds. 'green' = on track, 'amber' = watch it, anything worse = act now. Override by copying this file to .sdlc-kpis.json in your repo root (or pass --targets FILE).",
+  "min_sample": 5,
+  "deploy_frequency": { "better": "higher", "green": 5,   "amber": 1,   "unit": "per week" },
+  "lead_time":        { "better": "lower",  "green": 24,  "amber": 168, "unit": "hours" },
+  "change_failure":   { "better": "lower",  "green": 15,  "amber": 30,  "unit": "percent" },
+  "time_to_restore":  { "better": "lower",  "green": 24,  "amber": 168, "unit": "hours" },
+  "review_wait":      { "better": "lower",  "green": 4,   "amber": 24,  "unit": "hours" }
+}
