@@ -69,6 +69,7 @@ a zip with `SKILL.md` at its root isn't recognized as a skill.
 |---|---|---|
 | `pr-workflow` | `git`, `gh` signed in (`gh auth login`), `jq`, `python3`. Plus whichever reviewer you pick: nothing extra for Claude; the `codex` CLI for Codex; the `gemini` CLI for Gemini; `gh` v2.88+ and Copilot code review on your plan for Copilot | Claude Code, which can reach your repo and GitHub |
 | `issue-workflow` | `git`, `gh` signed in (`gh auth login`) with permission to label, assign and close issues, `jq`, and the `pr-workflow` skill installed alongside it (plus that skill's needs) | Claude Code, which can reach your repo and GitHub |
+| `quality-audit` | `git`, `jq`. To file GitHub issues: `gh` signed in with permission to create issues and labels. For Jira, Linear, Asana, ClickUp, GitLab, Azure Boards, Notion or Trello: that tool's connector enabled in Claude. With neither, it exports `tasks.md` and an import-ready `tasks.csv` | Claude Code, which can read your repo and run its tests |
 
 **Choosing the PR reviewer.** The first time you run `pr-workflow`, it asks which AI
 should review your PRs: Claude Opus (recommended), Claude Sonnet, OpenAI Codex, Google
@@ -107,6 +108,15 @@ open, the issue stays in progress with a status comment and is closed only after
 merge. Set `ISSUE_WORKFLOW_LABEL` to use a different label and
 `ISSUE_WORKFLOW_SKIP_LABELS` (comma-separated) to change which labels are never picked.
 Install it next to `pr-workflow`, since it hands the PR off to that skill.
+
+**Auditing quality.** `quality-audit` detects your languages, frameworks and CI, then checks for
+missing or weak unit, integration, UI, end-to-end, contract, accessibility and performance
+tests, and for gaps in linting, types, CI/CD, security, dependencies, observability, docs
+and config. Each gap becomes a right-sized ticket with evidence and acceptance criteria,
+filed in your tracker after you approve the plan. It matches the tools your project already
+uses and skips tickets that already exist, so re-running it is safe. Set `QUALITY_AUDIT_LABEL`
+(default `quality`) and `QUALITY_AUDIT_MAX_ISSUES` (default `25`) to change the label and the cap.
+Say "audit this repo's quality and file tickets in Linear" (or Jira, GitHub, and so on).
 
 ### Subagents
 
@@ -148,6 +158,7 @@ white-oak-ai-hub/
 | Skill | What it does |
 |---|---|
 | [`pr-workflow`](skills/pr-workflow/SKILL.md) | Opens a PR, has an independent senior-engineer reviewer (Claude, Codex, Gemini or Copilot, chosen once and remembered) review it, fixes the comments, re-reviews (max 3 rounds), then merges once every comment is addressed and CI passes. |
+| [`quality-audit`](skills/quality-audit/SKILL.md) | Audits a codebase for missing tests (unit, integration, UI, e2e), weak tooling and config for its languages and environment, then files each gap as an evidence-backed ticket in your tracker (GitHub, Jira, Linear, Asana, ClickUp and more, or a CSV export). |
 | [`issue-workflow`](skills/issue-workflow/SKILL.md) | Picks the open issue with the most value for the least risk (or the one you name), checks it's ready to work on, marks it in progress, implements and tests the fix, ships it through `pr-workflow`, then closes the issue once the PR merges. |
 
 ## Creating a skill
