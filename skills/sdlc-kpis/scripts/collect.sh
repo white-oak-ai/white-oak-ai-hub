@@ -29,7 +29,7 @@ while [[ $# -gt 0 ]]; do
     *) die "unknown option: $1" ;;
   esac
 done
-[[ "$days" =~ ^[0-9]+$ ]] && (( days >= 7 && days <= 180 )) || die "--days must be 7-180"
+if ! [[ "$days" =~ ^[0-9]+$ ]] || (( days < 7 || days > 180 )); then die "--days must be 7-180"; fi
 command -v jq >/dev/null || die "jq is required"
 mkdir -p "$out"
 
