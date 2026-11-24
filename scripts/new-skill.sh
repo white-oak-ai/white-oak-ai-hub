@@ -24,6 +24,10 @@ fi
 mkdir -p "$dest"/{scripts,references,assets}
 touch "$dest"/{scripts,references,assets}/.gitkeep
 
+if [[ -f "$root/templates/skill-template/references/environment.example.md" ]]; then
+  cp "$root/templates/skill-template/references/environment.example.md" "$dest/references/environment.example.md"
+fi
+
 title="$(echo "$name" | sed -E 's/-/ /g; s/\b(.)/\u\1/g')"
 sed -e "s/SKILL_NAME/$name/" -e "s/SKILL_TITLE/$title/" \
   "$root/templates/skill-template/SKILL.md" > "$dest/SKILL.md"

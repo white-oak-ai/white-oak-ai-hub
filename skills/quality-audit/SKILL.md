@@ -25,8 +25,9 @@ verified, so every ticket is worth the time of the person who gets it.
 - **Don't leak.** If you find a real secret, don't copy it into a ticket or report. Say where it
   is and tell the user to rotate it.
 
-## 0. Set up
+## 0. Set up & environment
 
+- Read environment configuration: check `<skill-dir>/references/environment.md` or `config/environment.local.yaml` (run `./scripts/setup-environment.sh --check` if in hub). If configured, tracker destination (`ticketing.tracker`), project key (`ticketing.project_key`), and connector (`ticketing.connector`) are taken directly from configuration. If unconfigured or placeholders remain, run `./scripts/setup-environment.sh --init`.
 - Scope: the repo root unless the user names a path or package. For a monorepo
   (`monorepo_hint` in step 1) audit the root once for shared tooling, then each package that
   matters (ask if there are more than 5).
@@ -35,7 +36,7 @@ verified, so every ticket is worth the time of the person who gets it.
 - Needs `jq`. Filing GitHub issues also needs `gh auth login` (the scripts use REST only,
   because GraphQL is blocked in Claude Code cloud sessions).
 
-Settings (environment variables, optional): `QUALITY_AUDIT_LABEL` (default `quality`),
+Settings (environment variables, optional): `QUALITY_AUDIT_LABEL` (default `quality` or from environment config),
 `QUALITY_AUDIT_MAX_ISSUES` (default `25`).
 
 ## 1. Detect the stack and the tracker
@@ -51,8 +52,7 @@ linters, type checking, formatters, hooks, what CI actually runs, security tooli
 repo hygiene files, and the source directories with no tests. Treat it as a map of
 where to look, not as the answer: it matches file names and manifests, so verify before filing.
 
-`tracker.json` ranks the likely task trackers from repo evidence. Pick the destination now
-using `<skill-dir>/references/trackers.md` ("Choosing the destination"): check your tool
+`tracker.json` ranks the likely task trackers from repo evidence. If `ticketing.tracker` is set in environment config, use that as the destination; otherwise pick using `<skill-dir>/references/trackers.md` ("Choosing the destination"): check your tool
 list for tracker connectors too, and ask the user once if it's ambiguous or you'd have to
 guess the project/team/board. Don't create anything yet.
 

@@ -5,3 +5,11 @@ node_modules/
 __pycache__/
 *.pyc
 .env
+
+# Local environment overrides
+config/*.local.yaml
+config/*.local.yml
+*.local.yaml
+*.local.yml
+*.local.md
+

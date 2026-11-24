@@ -15,12 +15,12 @@ does the fixes, and the reviewer checks them on the next round.
 
 `<skill-dir>` below means this skill's folder.
 
-## 0. Check prerequisites
+## 0. Check prerequisites & environment
 
+- Read environment configuration: check `<skill-dir>/references/environment.md` or `config/environment.local.yaml` (run `./scripts/setup-environment.sh --check` if in hub). If unconfigured, run `./scripts/setup-environment.sh --init` to configure branch patterns, reviewers, and CI conventions.
 - `gh auth status` succeeds, the folder is a git repo with a GitHub remote, and `jq` is
   installed. If `gh` isn't signed in, stop and tell the user to run `gh auth login`.
-- Get `<owner>/<repo>` from `git remote get-url origin`, then find the default branch:
-  `gh api repos/<owner>/<repo> --jq .default_branch`.
+- Target repo `<owner>/<repo>`: use `default_repo` from environment config, falling back to `git remote get-url origin`, then find the default branch from config or `gh api repos/<owner>/<repo> --jq .default_branch`.
 - Prefer `gh api` (REST) over `gh pr ...` and `gh repo view`. Those commands use GitHub
   GraphQL, which is blocked in Claude Code cloud sessions. The scripts in `scripts/`
   already use REST.
@@ -36,7 +36,8 @@ does the fixes, and the reviewer checks them on the next round.
 ```
 
 - **If it prints a reviewer, use it. Don't ask again.**
-- If it prints nothing, this is the first run. Ask the user **once** which AI should
+- If environment config specifies `conventions.pr_reviewers`, use the first configured reviewer.
+- If it prints nothing and environment config has no reviewer specified, this is the first run. Ask the user **once** which AI should
   review their PRs (use AskUserQuestion if available). Offer:
   - **Claude Opus** (`claude-opus`), recommended: strongest reviewer, runs as a subagent
     here with nothing extra to install
@@ -56,7 +57,7 @@ does the fixes, and the reviewer checks them on the next round.
 
 ## 1. Get the branch ready
 
-- If on the default branch, create a branch: `git switch -c <type>/<short-slug>`
+- If on the default branch, create a branch following `conventions.branch_pattern` from environment config (default `feat/{issue_id}-{slug}` or `<type>/<short-slug>`).
   (`feat/`, `fix/`, `chore/`, `docs/`, `refactor/`).
 - Check `git status`. Commit changes that are part of the work being PR'd. If it's unclear
   whether some changes belong, ask before committing them.

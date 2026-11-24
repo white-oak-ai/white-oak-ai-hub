@@ -11,6 +11,21 @@ git clone https://github.com/white-oak-ai/white-oak-ai-hub.git
 cd white-oak-ai-hub
 ```
 
+## Environment configuration (first run)
+
+To allow skills (`issue-workflow`, `pr-workflow`, `quality-audit`, `sdlc-kpis`) to know your repositories, issue tracker (GitHub Issues, Linear, Jira, GitLab), and git conventions without asking each run, configure your environment:
+
+```bash
+./scripts/setup-environment.sh --init
+```
+
+This auto-detects your git remote and default branch, prompts for your issue tracker and project key, and writes your local configuration to `config/environment.local.yaml` (which is git-ignored).
+
+- **Check status**: `./scripts/setup-environment.sh --check`
+- **Inspect resolved configuration**: `./scripts/setup-environment.sh --json`
+- **Template**: see `config/environment.example.yaml` for all options (multi-repo mappings, issue-prefix routing, branch patterns, reviewer preferences).
+- **Zero secrets**: never put API keys or tokens in configuration files. Use standard CLI logins (`gh auth login`) or environment variables.
+
 ### Claude Code
 
 Claude Code picks up skills from two places:
