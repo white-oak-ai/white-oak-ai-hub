@@ -17,6 +17,9 @@ on:
         required: false
         default: "Bug fixes and performance improvements."
 
+permissions:
+  contents: write
+
 env:
   APP_ID: "${{ vars.ASC_APP_APPLE_ID }}"
 
@@ -24,6 +27,11 @@ jobs:
   release-appstore:
     runs-on: macos-14
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Setup App Store Connect Auth
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
@@ -85,3 +93,23 @@ jobs:
           asc versions submit-for-review \
             --app "${{ env.APP_ID }}" \
             --version "${{ steps.vars.outputs.VERSION }}"
+
+      - name: Tag Release Commit & Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="v${{ steps.vars.outputs.VERSION }}"
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Tag $TAG_NAME already exists in git."
+          else
+            echo "==> Creating and pushing git tag $TAG_NAME..."
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG_NAME" -m "Release $TAG_NAME (Build ${{ steps.vars.outputs.BUILD }})"
+            git push origin "$TAG_NAME"
+
+            echo "==> Creating GitHub Release..."
+            gh release create "$TAG_NAME" \
+              --title "Release $TAG_NAME (Build ${{ steps.vars.outputs.BUILD }})" \
+              --notes "${{ steps.vars.outputs.NOTES }}" || true
+          fi
