@@ -1,0 +1,55 @@
+name: TestFlight External
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: "Build number to distribute to external beta testers"
+        required: true
+      whats_to_test:
+        description: "Beta release notes for testers"
+        required: true
+        default: "Bug fixes and performance improvements."
+      group_name:
+        description: "External TestFlight Group Name"
+        required: true
+        default: "Public Beta"
+
+env:
+  APP_ID: "${{ vars.ASC_APP_APPLE_ID }}"
+
+jobs:
+  distribute-external:
+    runs-on: macos-14
+    steps:
+      - name: Setup App Store Connect Auth
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "${{ secrets.ASC_KEY_P8_BASE64 }}" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+          echo "ASC_KEY_ID=${{ secrets.ASC_KEY_ID }}" >> $GITHUB_ENV
+          echo "ASC_ISSUER_ID=${{ secrets.ASC_ISSUER_ID }}" >> $GITHUB_ENV
+          echo "ASC_PRIVATE_KEY_PATH=$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8" >> $GITHUB_ENV
+
+      - name: Install ASC CLI
+        run: |
+          which asc || brew install apple/apple/asc || brew install asc-cli
+
+      - name: Set What to Test Info
+        run: |
+          asc testflight builds set-test-info \
+            --app "${{ env.APP_ID }}" \
+            --build-number "${{ github.event.inputs.build_number }}" \
+            --whats-new "${{ github.event.inputs.whats_to_test }}"
+
+      - name: Assign Build to External Group
+        run: |
+          asc testflight groups add-build \
+            --group "${{ github.event.inputs.group_name }}" \
+            --app "${{ env.APP_ID }}" \
+            --build-number "${{ github.event.inputs.build_number }}"
+
+      - name: Submit for TestFlight Beta Review
+        run: |
+          asc testflight beta-reviews submit \
+            --app "${{ env.APP_ID }}" \
+            --build-number "${{ github.event.inputs.build_number }}"

@@ -1,0 +1,82 @@
+name: TestFlight Internal
+
+on:
+  push:
+    branches: [ develop ]
+  workflow_dispatch:
+
+env:
+  APP_ID: "${{ vars.ASC_APP_APPLE_ID }}"
+  SCHEME: "MyApp"
+  BUNDLE_ID: "com.yourcompany.myapp"
+
+jobs:
+  build-and-upload:
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.0.app
+
+      - name: Setup App Store Connect Auth
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "${{ secrets.ASC_KEY_P8_BASE64 }}" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+          echo "ASC_KEY_ID=${{ secrets.ASC_KEY_ID }}" >> $GITHUB_ENV
+          echo "ASC_ISSUER_ID=${{ secrets.ASC_ISSUER_ID }}" >> $GITHUB_ENV
+          echo "ASC_PRIVATE_KEY_PATH=$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8" >> $GITHUB_ENV
+
+      - name: Setup Code Signing Keychain
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          chmod +x ci/setup-signing.sh
+          ./ci/setup-signing.sh
+
+      - name: Bump Build Number
+        run: |
+          agvtool new-version -all "${{ github.run_number }}"
+
+      - name: Archive and Export IPA
+        run: |
+          xcodebuild -workspace MyApp.xcworkspace \
+                     -scheme "${{ env.SCHEME }}" \
+                     -configuration Release \
+                     -archivePath "$RUNNER_TEMP/MyApp.xcarchive" \
+                     archive
+
+          xcodebuild -exportArchive \
+                     -archivePath "$RUNNER_TEMP/MyApp.xcarchive" \
+                     -exportPath "$RUNNER_TEMP/build" \
+                     -exportOptionsPlist ci/ExportOptions.plist
+
+      - name: Install ASC CLI
+        run: |
+          which asc || brew install apple/apple/asc || brew install asc-cli
+
+      - name: Upload IPA to App Store Connect
+        run: |
+          asc builds upload \
+            --app "${{ env.APP_ID }}" \
+            --file "$RUNNER_TEMP/build/${{ env.SCHEME }}.ipa"
+
+      - name: Wait for Processing & Distribute to Internal Testers
+        run: |
+          asc builds wait-for-processing \
+            --app "${{ env.APP_ID }}" \
+            --build-number "${{ github.run_number }}"
+
+          asc testflight groups add-build \
+            --group "App Store Connect Users" \
+            --app "${{ env.APP_ID }}" \
+            --build-number "${{ github.run_number }}"
+
+      - name: Clean Up Keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/build.keychain" > /dev/null 2>&1 || true

@@ -1,0 +1,87 @@
+name: App Store Production Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "App Store Version String (e.g. 1.2.0)"
+        required: true
+      build_number:
+        description: "Build number to attach to this release"
+        required: true
+      release_notes:
+        description: "App Store What's New release notes"
+        required: false
+        default: "Bug fixes and performance improvements."
+
+env:
+  APP_ID: "${{ vars.ASC_APP_APPLE_ID }}"
+
+jobs:
+  release-appstore:
+    runs-on: macos-14
+    steps:
+      - name: Setup App Store Connect Auth
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "${{ secrets.ASC_KEY_P8_BASE64 }}" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+          echo "ASC_KEY_ID=${{ secrets.ASC_KEY_ID }}" >> $GITHUB_ENV
+          echo "ASC_ISSUER_ID=${{ secrets.ASC_ISSUER_ID }}" >> $GITHUB_ENV
+          echo "ASC_PRIVATE_KEY_PATH=$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8" >> $GITHUB_ENV
+
+      - name: Install ASC CLI
+        run: |
+          which asc || brew install apple/apple/asc || brew install asc-cli
+
+      - name: Resolve Version and Build Number
+        id: vars
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "BUILD=${{ github.event.inputs.build_number }}" >> $GITHUB_OUTPUT
+            echo "NOTES=${{ github.event.inputs.release_notes }}" >> $GITHUB_OUTPUT
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+            # Fetch latest valid build for this version from ASC
+            LATEST_BUILD=$(asc builds list --app "${{ env.APP_ID }}" --limit 1 --json | jq -r '.[0].attributes.version')
+            echo "BUILD=$LATEST_BUILD" >> $GITHUB_OUTPUT
+            echo "NOTES=Bug fixes and performance enhancements." >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Version in App Store Connect
+        run: |
+          asc versions create \
+            --app "${{ env.APP_ID }}" \
+            --version "${{ steps.vars.outputs.VERSION }}" \
+            --platform IOS || echo "Version already exists in App Store Connect."
+
+      - name: Set Release Notes
+        run: |
+          asc versions set-release-notes \
+            --app "${{ env.APP_ID }}" \
+            --version "${{ steps.vars.outputs.VERSION }}" \
+            --text "${{ steps.vars.outputs.NOTES }}"
+
+      - name: Attach Build to App Store Version
+        run: |
+          asc versions attach-build \
+            --app "${{ env.APP_ID }}" \
+            --version "${{ steps.vars.outputs.VERSION }}" \
+            --build-number "${{ steps.vars.outputs.BUILD }}"
+
+      - name: Configure 7-Day Phased Release
+        run: |
+          asc versions set-phased-release \
+            --app "${{ env.APP_ID }}" \
+            --version "${{ steps.vars.outputs.VERSION }}" \
+            --state ACTIVE
+
+      - name: Submit for App Store Review
+        run: |
+          asc versions submit-for-review \
+            --app "${{ env.APP_ID }}" \
+            --version "${{ steps.vars.outputs.VERSION }}"
