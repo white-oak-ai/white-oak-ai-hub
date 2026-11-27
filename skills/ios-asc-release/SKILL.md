@@ -149,6 +149,7 @@ This installs:
   3. `asc versions attach-build` attaches the specified build.
   4. `asc versions set-phased-release --state ACTIVE` turns on 7-day phased rollout.
   5. `asc versions submit-for-review` submits the app to App Store Review.
+  6. Automatically verifies/creates the Git release tag (`vX.Y.Z`) on the released commit and publishes an official GitHub Release with the release notes.
 
 ---
 
